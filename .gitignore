@@ -1,0 +1,109 @@
+# ================================
+# 🤖 AI Agent / Workspace Configurations & Private Docs
+# ================================
+AGENTS.md
+GEMINI.md
+/.gemini
+/.agent/
+/.claude/
+/doc_internal/
+*.bat
+
+
+# ================================
+# 🔐 Credentials / Secrets
+# ================================
+credentials.json
+token.json
+.env
+.env.*
+!.env.sample
+
+# ================================
+# 🏗️ Go ビルド成果物
+# ================================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+
+# Go カバレッジ
+c.out
+cov
+cov_*
+coverage
+coverage.out
+coverage_result.txt
+*.coverprofile
+
+# ================================
+# 📦 配布・ビルド成果物
+# ================================
+dist/
+build/
+
+# ================================
+# 🔍 全文検索インデックス (Bleve)
+# ================================
+*.bleve/
+doc_fts.bleve/
+
+# ================================
+# 🧪 テスト成果物・一時ファイル
+# ================================
+test_out.txt
+test_result.txt
+test_result.log
+test.log
+*.log
+~$*.xlsx
+sample_backup_*.xlsx
+
+# Go プロファイリング成果物
+*.prof
+*.pprof
+cpu.out
+mem.out
+
+# ================================
+# 💻 IDE / エディタ設定
+# ================================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ================================
+# 🔧 プロジェクト固有の一時ファイル
+# ================================
+/output_dir/
+/pageindex/
+/.workspace_cache/
+/excel
+/excel.out
+/fts
+/fts.out
+/pptx.out
+/util
+/util.out
+/util_cov
+/scratch/
+/stuff/
+/broken/
+
+# ================================
+# 🗑️ OS 生成ファイル
+# ================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ================================
+# 📊 SQLite
+# ================================
+*.sqlite3
+
