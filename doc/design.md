@@ -26,7 +26,10 @@
 
 | 機能カテゴリ | 機能ID | 機能名 | 概要 | 対応要件ID |
 |:---|:---|:---|:---|:---|
+| 横断・基盤 | CLI-F01 | non-interactive | 対話プロンプト完全排除・`--force` による安全上書き制御 | NFR-01 |
+| 横断・基盤 | CLI-F02 | structured-output | `--json` による構造化出力および `stderr` エラーハンドリング | NFR-02 |
 | 探訪 | INTRO-F01 | agent-context | CLI の全サブコマンドと引数型定義を JSON 出力 | NFR-03 |
+| 品質・検証 | QA-F01 | test-coverage | 主要パッケージにおけるカバレッジ 90% 以上の達成 | NFR-04 |
 | Excel操作 | EXCEL-F01 | excel list-sheets | Excel 内の全シート名一覧を取得 | EXCEL-01 |
 | Excel操作 | EXCEL-F02 | excel extract-csv | Excel シートを個別の CSV ファイルとして抽出 | EXCEL-02 |
 | Excel操作 | EXCEL-F03 | excel extract-images | Excel シートを Fit-to-Page 設定で高精度 PNG 化 (`go-ole`) | EXCEL-03 |
