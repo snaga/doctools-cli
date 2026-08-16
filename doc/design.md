@@ -50,6 +50,7 @@
 | 全文検索 (FTS) | FTS-F03 | fts build --file-timeout | タイムアウト制御による安全なファイルスキップ | FTS-03 |
 | 全文検索 (FTS) | FTS-F04 | fts build --include-ext | 対象拡張子の包含・除外フィルター | FTS-04 |
 | 全文検索 (FTS) | FTS-F05 | fts query (Self-Describing) | AI エージェント向けクエリ構文・フィールド定義の自己説明 | FTS-05 |
+| 全文検索 (FTS) | FTS-F06 | fts build (--include-dir / --exclude-dir) | 隠しディレクトリのデフォルト除外 & ディレクトリ包含/除外フィルター | FTS-06 |
 | 構造RAG | PI-F01 | pageindex build | LLM サマリー付き構造 PageIndex インデックスの生成 | PAGEINDEX-01 |
 | 構造RAG | PI-F02 | pageindex tree | 目次・ツリー構造の段階的取得 | PAGEINDEX-02 |
 | 構造RAG | PI-F03 | pageindex content | 特定ノード / ページ / シートのフルテキストピンポイント抽出 | PAGEINDEX-03 |
@@ -171,6 +172,14 @@
 - **FTS-F05: fts query (AIエージェント向け Self-Describing 強化)**
   - **概要**: `fts query` コマンドの Command `Long` 説明文に Bleve QueryString の構文ルール、具体例、および検索可能フィールド一覧を明記。
   - **対応要件**: FTS-05
+- **FTS-F06: fts build (--include-dir / --exclude-dir)**
+  - **概要**: 隠しディレクトリ（`.` 始まり）の自動スキップ、および `--exclude-dir` / `--include-dir` によるディレクトリ単位の高速走査枝刈り。
+  - **対応要件**: FTS-06
+  - **設計のポイント**:
+    1. `filepath.Walk` 走査時にディレクトリを判定し、`filepath.SkipDir` を返却することで配下の探索を即座に中断・枝刈り。
+    2. デフォルトでドット `.` で始まるディレクトリ（ルート自身を除く）をスキップ。
+    3. `--exclude-dir` に指定されたディレクトリは即座にスキップ。
+    4. `--include-dir` が指定された場合は指定ディレクトリ配下のみを許可。隠しディレクトリであっても `--include-dir` に明示指定されている場合は走査を許可。
 
 ### 機能カテゴリ: 構造RAG (PAGEINDEX)
 - **PAGEINDEX-F01: pageindex build**

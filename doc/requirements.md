@@ -102,8 +102,15 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
   - ユーザーストーリー: AI エージェントとして、`doctools-cli agent-context` や `--help` を実行した際に、Bleve で利用可能な QueryString の構文ルール (AND/OR/NOT, フレーズ, ワイルドカード, フィールド指定等) や利用可能メタデータフィールド一覧を直接認識・理解したい。なぜなら推測に頼らず一発で高精度な複合検索クエリを発行するためだ。
   - EARS 受け入れ基準:
     - ［Event-driven］ `doctools-cli agent-context` または `doctools-cli fts query --help` が呼び出されたとき、システムは Command の説明文 (`Long`) に QueryString の構文ルール、具体例、および検索可能フィールド一覧 (`content`, `file_path`, `file_name`, `file_type`, `unit_type`, `unit_name`, `locator`, `updated_at`, `page_or_index`) を明記して出力しなければならない。
+    - ［Ubiquitous］ システムは拡張子の指定において、ドットあり (`.md,.csv`) とドットなし (`md,csv`) のどちらの表記も同等に受け入れ、小文字に正規化して判定を行わなければならない。
 
-  - EARS 受け入れ基準: ［Ubiquitous］ システムは拡張子の指定において、ドットあり (`.md,.csv`) とドットなし (`md,csv`) のどちらの表記も同等に受け入れ、小文字に正規化して判定を行わなければならない。
+- 要件 FTS-06: 隠しディレクトリのデフォルト除外 & ディレクトリ除外・包含フィルター (`doctools-cli fts build --exclude-dir / --include-dir`)
+  - ユーザーストーリー: AI エージェントおよびユーザーとして、`.git` や `.trash`, `.obsidian`, `node_modules` などの不要な隠しフォルダや一時ディレクトリの走査をスキップし、特定の信頼できるサブディレクトリのみを選択的にインデックス構築したい。なぜならインデックス作成時間を短縮し、DBサイズを極小化するためだ。
+  - EARS 受け入れ基準:
+    - ［Ubiquitous］ システムは、デフォルトで先頭がドット `.` で始まる隠しディレクトリ（探索のルートディレクトリ自身を除く）の探索を `filepath.SkipDir` によりスキップしなければならない。
+    - ［Event-driven］ `--exclude-dir` フラグ（カンマ区切りまたは複数指定）が指定されたとき、システムは一致するディレクトリ名の配下走査をスキップしなければならない。
+    - ［Event-driven］ `--include-dir` フラグ（カンマ区切りまたは複数指定）が指定されたとき、システムは指定されたディレクトリ配下のドキュメントのみをインデックス対象としなければならない。
+    - ［Event-driven］ 隠しディレクトリ（`.` で始まるディレクトリ）であっても、`--include-dir` に明示的に指定されている場合は、システムはそのディレクトリの走査を許可しなければならない。
 
 ### 要件カテゴリ: 構造RAG (PAGEINDEX)
 - 要件 PAGEINDEX-01: PageIndex 構造サマリーインデックス構築 (`doctools-cli pageindex build`)

@@ -23,6 +23,8 @@ var (
 	ftsBuildForce       bool
 	ftsBuildIncludeExt  string
 	ftsBuildExcludeExt  string
+	ftsBuildIncludeDir  string
+	ftsBuildExcludeDir  string
 )
 
 var ftsBuildCmd = &cobra.Command{
@@ -36,6 +38,8 @@ var ftsBuildCmd = &cobra.Command{
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		includeExtStr, _ := cmd.Flags().GetString("include-ext")
 		excludeExtStr, _ := cmd.Flags().GetString("exclude-ext")
+		includeDirStr, _ := cmd.Flags().GetString("include-dir")
+		excludeDirStr, _ := cmd.Flags().GetString("exclude-dir")
 
 		timeout, err := time.ParseDuration(timeoutStr)
 		if err != nil {
@@ -60,6 +64,24 @@ var ftsBuildCmd = &cobra.Command{
 			}
 		}
 
+		var includeDirs []string
+		if includeDirStr != "" {
+			for _, s := range strings.Split(includeDirStr, ",") {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					includeDirs = append(includeDirs, trimmed)
+				}
+			}
+		}
+
+		var excludeDirs []string
+		if excludeDirStr != "" {
+			for _, s := range strings.Split(excludeDirStr, ",") {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					excludeDirs = append(excludeDirs, trimmed)
+				}
+			}
+		}
+
 		res, err := fts.BuildIndexWithOptions(args[0], fts.BuildOptions{
 			IndexPath:   indexPath,
 			Timeout:     timeout,
@@ -67,6 +89,8 @@ var ftsBuildCmd = &cobra.Command{
 			Verbose:     verbose,
 			IncludeExts: includeExts,
 			ExcludeExts: excludeExts,
+			IncludeDirs: includeDirs,
+			ExcludeDirs: excludeDirs,
 		})
 
 		// Reset flags after run for next CLI invocation in same process
@@ -76,6 +100,8 @@ var ftsBuildCmd = &cobra.Command{
 		_ = cmd.Flags().Set("verbose", "false")
 		_ = cmd.Flags().Set("include-ext", "")
 		_ = cmd.Flags().Set("exclude-ext", "")
+		_ = cmd.Flags().Set("include-dir", "")
+		_ = cmd.Flags().Set("exclude-dir", "")
 
 		if err != nil {
 			util.ExitWithError(err)
@@ -137,6 +163,8 @@ func init() {
 	ftsBuildCmd.Flags().BoolVarP(&ftsVerbose, "verbose", "v", false, "Show detailed progress on stderr")
 	ftsBuildCmd.Flags().StringVar(&ftsBuildIncludeExt, "include-ext", "", "Comma-separated list of included extensions (e.g. xlsx,pptx,pdf)")
 	ftsBuildCmd.Flags().StringVar(&ftsBuildExcludeExt, "exclude-ext", "", "Comma-separated list of excluded extensions")
+	ftsBuildCmd.Flags().StringVar(&ftsBuildIncludeDir, "include-dir", "", "Comma-separated list of included directory names or paths")
+	ftsBuildCmd.Flags().StringVar(&ftsBuildExcludeDir, "exclude-dir", "", "Comma-separated list of excluded directory names or paths")
 
 	ftsBuildCmd.Flags().SetNormalizeFunc(func(f *pflag.FlagSet, name string) pflag.NormalizedName {
 		switch name {
@@ -144,6 +172,10 @@ func init() {
 			return pflag.NormalizedName("include-ext")
 		case "exclude":
 			return pflag.NormalizedName("exclude-ext")
+		case "include-dirs":
+			return pflag.NormalizedName("include-dir")
+		case "exclude-dirs":
+			return pflag.NormalizedName("exclude-dir")
 		}
 		return pflag.NormalizedName(name)
 	})
