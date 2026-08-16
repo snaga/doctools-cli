@@ -45,6 +45,8 @@ type BuildOptions struct {
 	Verbose     bool
 	IncludeExts []string
 	ExcludeExts []string
+	IncludeDirs []string
+	ExcludeDirs []string
 }
 
 func normalizeExt(ext string) string {
@@ -61,6 +63,23 @@ func normalizeExt(ext string) string {
 // NormalizeExt normalizes file extension string with leading dot, lowercase, and trimmed spaces.
 func NormalizeExt(ext string) string {
 	return normalizeExt(ext)
+}
+
+func normalizeDir(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.ToSlash(filepath.Clean(dir))
+	dir = strings.TrimPrefix(dir, "./")
+	dir = strings.TrimPrefix(dir, "/")
+	dir = strings.TrimSuffix(dir, "/")
+	return dir
+}
+
+// NormalizeDir normalizes directory path by trimming spaces, converting separators to slash, and removing leading/trailing slashes.
+func NormalizeDir(dir string) string {
+	return normalizeDir(dir)
 }
 
 // BuildResult represents the result metrics of building an index.
@@ -231,17 +250,122 @@ func BuildIndexWithOptions(sourceDir string, opts BuildOptions) (*BuildResult, e
 		}
 	}
 
+	var incDirs []string
+	for _, d := range opts.IncludeDirs {
+		if norm := normalizeDir(d); norm != "" {
+			incDirs = append(incDirs, norm)
+		}
+	}
+
+	var excDirs []string
+	for _, d := range opts.ExcludeDirs {
+		if norm := normalizeDir(d); norm != "" {
+			excDirs = append(excDirs, norm)
+		}
+	}
+
+	isDirExcluded := func(dirRel string, dirName string) bool {
+		for _, exc := range excDirs {
+			if strings.EqualFold(dirName, exc) || strings.EqualFold(dirRel, exc) || strings.HasPrefix(strings.ToLower(dirRel), strings.ToLower(exc)+"/") {
+				return true
+			}
+		}
+		return false
+	}
+
+	isDirIncludedOrAncestorOrDescendant := func(dirRel string) bool {
+		if len(incDirs) == 0 {
+			return true
+		}
+		dirRelLower := strings.ToLower(dirRel)
+		for _, inc := range incDirs {
+			incLower := strings.ToLower(inc)
+			// Matches exact, is descendant of inc, or is ancestor of inc
+			if dirRelLower == incLower || strings.HasPrefix(dirRelLower, incLower+"/") || strings.HasPrefix(incLower, dirRelLower+"/") {
+				return true
+			}
+		}
+		return false
+	}
+
+	isFileIncluded := func(fileRel string) bool {
+		if len(incDirs) == 0 {
+			return true
+		}
+		fileRelLower := strings.ToLower(filepath.ToSlash(fileRel))
+		for _, inc := range incDirs {
+			incLower := strings.ToLower(inc)
+			if strings.HasPrefix(fileRelLower, incLower+"/") || fileRelLower == incLower {
+				return true
+			}
+		}
+		return false
+	}
+
 	var indexedFiles, skippedFiles, timeoutFiles, indexedChunks int
 
 	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil {
 			return nil
 		}
 
+		rel, relErr := filepath.Rel(sourceDir, path)
+		if relErr != nil {
+			rel = path
+		}
+		relSlash := filepath.ToSlash(rel)
+
+		if info.IsDir() {
+			// Root directory itself is not skipped
+			if relSlash == "." || relSlash == "" {
+				return nil
+			}
+
+			// Index directory check (never index Bleve index folder)
+			absPath := cleanPath(path)
+			absIdx := cleanPath(indexPath)
+			if strings.EqualFold(absPath, absIdx) || strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(absIdx)+"/") {
+				return filepath.SkipDir
+			}
+
+			name := info.Name()
+
+			// Check if explicitly included in IncludeDirs (exact or ancestor/descendant)
+			var explicitlyIncluded bool
+			if len(incDirs) > 0 {
+				explicitlyIncluded = isDirIncludedOrAncestorOrDescendant(relSlash)
+			}
+
+			// Hidden directory check (.trash, .obsidian, .git, etc.)
+			if strings.HasPrefix(name, ".") {
+				if !explicitlyIncluded {
+					return filepath.SkipDir
+				}
+			}
+
+			// ExcludeDirs check
+			if isDirExcluded(relSlash, name) {
+				return filepath.SkipDir
+			}
+
+			// IncludeDirs check
+			if len(incDirs) > 0 && !explicitlyIncluded {
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		// File processing
 		absPath := cleanPath(path)
 		absIdx := cleanPath(indexPath)
 
 		if strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(absIdx)) {
+			return nil
+		}
+
+		// If IncludeDirs is specified, verify file is under an included dir
+		if !isFileIncluded(relSlash) {
 			return nil
 		}
 
@@ -257,8 +381,6 @@ func BuildIndexWithOptions(sourceDir string, opts BuildOptions) (*BuildResult, e
 		if !incSet[ext] {
 			return nil
 		}
-
-		rel, _ := filepath.Rel(sourceDir, path)
 
 		if opts.Verbose {
 			fmt.Fprintf(os.Stderr, "[FTS] Processing file: %s ...\n", rel)

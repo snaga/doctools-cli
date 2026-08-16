@@ -50,8 +50,8 @@ AI エージェント（Claude, Gemini, Cursor, Codex 等）に `doctools` CLI �
   `doctools-cli pdf extract-text doc.pdf --output ./out/doc.md --json`
   `doctools-cli pdf extract-images doc.pdf --output-dir ./out/img_objs --json`
   `doctools-cli pdf extract-pages doc.pdf --output-dir ./out/slides --dpi 150 --format png --json`
-- **Bleve 全文検索 (On-the-fly チャンク化・差分更新・拡張子フィルター & QueryString 複合検索)**:
-  `doctools-cli fts build ./docs --index-path ./fts.bleve --include-ext md,csv,pdf --verbose --json`
+- **Bleve 全文検索 (On-the-fly チャンク化・差分更新・拡張子/ディレクトリフィルター & QueryString 複合検索)**:
+  `doctools-cli fts build ./docs --index-path ./fts.bleve --include-ext md,csv,pdf --exclude-dir Temp,node_modules --verbose --json`
   `doctools-cli fts query ./fts.bleve "検索キーワード" --limit 10 --json`
   `# 大量ドキュメントからの高度検索レシピ (QueryString 構文):`
   `# 1. 特定システムかつ特定のフレーズ検索: "file_path:*sysA* AND content:\"認証機能\""`
@@ -94,10 +94,11 @@ doctools-cli pdf merge <file1.pdf> <file2.pdf> ... --output <merged.pdf> --json
 doctools-cli pdf extract-images <file.pdf> [--output-dir <dir>] --json
 doctools-cli pdf extract-pages <file.pdf> [-o <dir>] [--dpi <dpi>] [--format <png|jpg>] [--start-page <n>] [--end-page <n>] [--force] --json
 
-# 全文検索 (On-the-fly チャンク化 Bleve 日本語検索・差分更新・拡張子フィルター)
-doctools-cli fts build <target-dir> [-i <index-path>] [--include-ext <xlsx,pptx,pdf>] [--exclude-ext <tmp>] [-t <10s>] [-f] [-v] --json
+# 全文検索 (On-the-fly チャンク化 Bleve 日本語検索・差分更新・拡張子/ディレクトリフィルター・隠しフォルダ自動除外)
+doctools-cli fts build <target-dir> [-i <index-path>] [--include-ext <xlsx,pdf>] [--exclude-ext <tmp>] [--include-dir <dir1,dir2>] [--exclude-dir <node_modules,Temp,build>] [-t <10s>] [-f] [-v] --json
 doctools-cli fts query <index-path> <query> [-l <limit>] --json
 # ※デフォルトのインデックス対象は Office/PDF バイナリのみ。Markdown や CSV も含める場合は --include-ext md,csv,pdf を指定。
+# ※.git や .obsidian, .trash などの隠しフォルダ（. 始まり）はデフォルトで自動除外されます。隠しフォルダを対象にする場合は --include-dir .obsidian のように明示指定してください。
 
 # PageIndex 構造RAG探索 (目次・ツリー構造の段階的探索)
 doctools-cli pageindex tree <file> [--node-id <id>] [--depth <n>] --json

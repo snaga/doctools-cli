@@ -548,6 +548,34 @@ func TestCLIFTSDetailed(t *testing.T) {
 	if !strings.Contains(outAlias, `"indexed_files": 1`) && !strings.Contains(outAlias, `"indexed_files":1`) {
 		t.Errorf("expected 1 indexed file with alias flags, got: %s", outAlias)
 	}
+
+	// 7. Test directory inclusion & exclusion flags (--include-dir, --exclude-dir, and aliases)
+	dirTree := filepath.Join(tmpDir, "fts_dirtree")
+	subInclude := filepath.Join(dirTree, "included_sub")
+	subExclude := filepath.Join(dirTree, "excluded_sub")
+	os.MkdirAll(subInclude, 0755)
+	os.MkdirAll(subExclude, 0755)
+	os.WriteFile(filepath.Join(subInclude, "inc.md"), []byte("included sub content"), 0644)
+	os.WriteFile(filepath.Join(subExclude, "exc.md"), []byte("excluded sub content"), 0644)
+
+	idxDirTest := filepath.Join(tmpDir, "cli_dirtest.bleve")
+	outDirTest, err := execWithStdout("fts", "build", dirTree, "-i", idxDirTest, "-f", "--include-ext", "md", "--include-dir", "included_sub", "--exclude-dir", "excluded_sub")
+	if err != nil {
+		t.Fatalf("fts build with dir flags failed: %v", err)
+	}
+	if !strings.Contains(outDirTest, `"indexed_files": 1`) && !strings.Contains(outDirTest, `"indexed_files":1`) {
+		t.Errorf("expected 1 indexed file with dir flags, got: %s", outDirTest)
+	}
+
+	// 8. Test directory flag aliases (--include-dirs, --exclude-dirs)
+	idxDirAlias := filepath.Join(tmpDir, "cli_diralias.bleve")
+	outDirAlias, err := execWithStdout("fts", "build", dirTree, "-i", idxDirAlias, "-f", "--include-ext", "md", "--include-dirs", "included_sub", "--exclude-dirs", "excluded_sub")
+	if err != nil {
+		t.Fatalf("fts build with dir alias flags failed: %v", err)
+	}
+	if !strings.Contains(outDirAlias, `"indexed_files": 1`) && !strings.Contains(outDirAlias, `"indexed_files":1`) {
+		t.Errorf("expected 1 indexed file with dir alias flags, got: %s", outDirAlias)
+	}
 }
 
 

@@ -416,3 +416,126 @@ func TestFTS_ExtensionFiltering(t *testing.T) {
 		t.Errorf("expected 2 indexed files (.md, .txt), got %d", resExc.IndexedFiles)
 	}
 }
+
+func TestNormalizeDir(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"docs", "docs"},
+		{"docs/sub", "docs/sub"},
+		{"docs\\sub", "docs/sub"},
+		{"./docs", "docs"},
+		{"/docs/", "docs"},
+		{"  docs/sub  ", "docs/sub"},
+		{"", ""},
+		{"   ", ""},
+	}
+	for _, tt := range tests {
+		got := fts.NormalizeDir(tt.input)
+		if got != tt.want {
+			t.Errorf("NormalizeDir(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestFTS_DirectoryPruningAndFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Structure:
+	// tmpDir/
+	//   doc_root.md
+	//   docs/
+	//     doc_docs.md
+	//     sub/
+	//       doc_sub.md
+	//   ignored/
+	//     doc_ignored.md
+	//   .trash/
+	//     doc_trash.md
+	//   .obsidian/
+	//     doc_obsidian.md
+
+	_ = os.WriteFile(filepath.Join(tmpDir, "doc_root.md"), []byte("Root markdown file"), 0644)
+
+	docsDir := filepath.Join(tmpDir, "docs")
+	_ = os.MkdirAll(filepath.Join(docsDir, "sub"), 0755)
+	_ = os.WriteFile(filepath.Join(docsDir, "doc_docs.md"), []byte("Docs markdown file"), 0644)
+	_ = os.WriteFile(filepath.Join(docsDir, "sub", "doc_sub.md"), []byte("Sub docs markdown file"), 0644)
+
+	ignoredDir := filepath.Join(tmpDir, "ignored")
+	_ = os.MkdirAll(ignoredDir, 0755)
+	_ = os.WriteFile(filepath.Join(ignoredDir, "doc_ignored.md"), []byte("Ignored markdown file"), 0644)
+
+	trashDir := filepath.Join(tmpDir, ".trash")
+	_ = os.MkdirAll(trashDir, 0755)
+	_ = os.WriteFile(filepath.Join(trashDir, "doc_trash.md"), []byte("Trash markdown file"), 0644)
+
+	obsidianDir := filepath.Join(tmpDir, ".obsidian")
+	_ = os.MkdirAll(obsidianDir, 0755)
+	_ = os.WriteFile(filepath.Join(obsidianDir, "doc_obsidian.md"), []byte("Obsidian markdown file"), 0644)
+
+	// 1. Default run (hidden directories .trash and .obsidian should be skipped, doc_root, docs/*, ignored/* indexed)
+	idxDefault := filepath.Join(tmpDir, "default.bleve")
+	resDef, err := fts.BuildIndexWithOptions(tmpDir, fts.BuildOptions{
+		IndexPath:   idxDefault,
+		Force:       true,
+		IncludeExts: []string{"md"},
+	})
+	if err != nil {
+		t.Fatalf("BuildIndexWithOptions default failed: %v", err)
+	}
+	// doc_root, doc_docs, doc_sub, doc_ignored = 4 files (.trash and .obsidian skipped)
+	if resDef.IndexedFiles != 4 {
+		t.Errorf("expected 4 indexed files by default (skipping hidden dirs), got %d", resDef.IndexedFiles)
+	}
+
+	// 2. ExcludeDirs run (exclude "ignored" and "docs/sub")
+	idxExc := filepath.Join(tmpDir, "exc.bleve")
+	resExc, err := fts.BuildIndexWithOptions(tmpDir, fts.BuildOptions{
+		IndexPath:   idxExc,
+		Force:       true,
+		IncludeExts: []string{"md"},
+		ExcludeDirs: []string{"ignored", "docs/sub"},
+	})
+	if err != nil {
+		t.Fatalf("BuildIndexWithOptions exclude dirs failed: %v", err)
+	}
+	// doc_root, doc_docs = 2 files
+	if resExc.IndexedFiles != 2 {
+		t.Errorf("expected 2 indexed files with ExcludeDirs, got %d", resExc.IndexedFiles)
+	}
+
+	// 3. IncludeDirs run (include only "docs")
+	idxInc := filepath.Join(tmpDir, "inc.bleve")
+	resInc, err := fts.BuildIndexWithOptions(tmpDir, fts.BuildOptions{
+		IndexPath:   idxInc,
+		Force:       true,
+		IncludeExts: []string{"md"},
+		IncludeDirs: []string{"docs"},
+	})
+	if err != nil {
+		t.Fatalf("BuildIndexWithOptions include dirs failed: %v", err)
+	}
+	// doc_docs, doc_sub = 2 files
+	if resInc.IndexedFiles != 2 {
+		t.Errorf("expected 2 indexed files with IncludeDirs=['docs'], got %d", resInc.IndexedFiles)
+	}
+
+	// 4. IncludeDirs allowing hidden folder explicitly (IncludeDirs = [".obsidian"])
+	idxHidden := filepath.Join(tmpDir, "hidden.bleve")
+	resHidden, err := fts.BuildIndexWithOptions(tmpDir, fts.BuildOptions{
+		IndexPath:   idxHidden,
+		Force:       true,
+		IncludeExts: []string{"md"},
+		IncludeDirs: []string{".obsidian"},
+	})
+	if err != nil {
+		t.Fatalf("BuildIndexWithOptions include hidden dir failed: %v", err)
+	}
+	// doc_obsidian = 1 file
+	if resHidden.IndexedFiles != 1 {
+		t.Errorf("expected 1 indexed file with IncludeDirs=['.obsidian'], got %d", resHidden.IndexedFiles)
+	}
+}
+
