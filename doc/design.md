@@ -78,6 +78,7 @@
 | デスクトップ検索GUI | DOCSEARCH-F04 | docsearch open-doc | 検索結果からのファイル・フォルダ直接起動 | DOCSEARCH-04 |
 | デスクトップ検索GUI | DOCSEARCH-F05 | docsearch query-expansion | Google GenAI SDK による表記揺れ・同義語の展開とタグ選択 | DOCSEARCH-05 |
 | デスクトップ検索GUI | DOCSEARCH-F06 | docsearch query-history | 検索履歴の永続化保持およびインクリメンタルサジェスト補完 | DOCSEARCH-06 |
+| デスクトップ検索GUI | DOCSEARCH-F07 | docsearch index-management | 起動時インデックス実在ヘルスチェックおよびダイアログによる動的インデックス追加 | DOCSEARCH-07 |
 
 ---
 
@@ -224,9 +225,9 @@
   - **対応要件**: DOCSEARCH-01
   - **設計のポイント**: バックグラウンド goroutine で Win32 メッセージループを回し、OS 全体のキー入力を低負荷で監視。非アクティブ時は CPU 消費 0%。
 - **DOCSEARCH-F02: docsearch search-bar**
-  - **概要**: デスクトップ中央に超軽量な枠なし小窓を表示し、検索語入力と複数インデックス選択チェックボックスを提供する。
+  - **概要**: デスクトップ中央に Web 風モダンUI（`Segoe UI` / `Meiryo UI` フォント、プレースホルダー、角丸、ダーク/ライト視認性配色）の枠なし小窓を表示し、検索語入力と複数インデックス選択タグ/チェックボックスを提供する。
   - **対応要件**: DOCSEARCH-02
-  - **設計のポイント**: 純 Go + `golang.org/x/sys/windows` によるネイティブ `CreateWindowEx`。Esc で即座に非表示、Enter で小窓を閉じつつブラウザへクエリを渡す。Tab キーでインデックス選択の切り替えが可能。
+  - **設計のポイント**: 純 Go + `golang.org/x/sys/windows` によるネイティブ `CreateWindowEx`。Windows 11 DWM 角丸 (`DWMWA_WINDOW_CORNER_PREFERENCE`) / リージョン角丸、`WM_SETFONT`、プレースホルダー (`EM_SETCUEBANNER`) を適用。Esc で即座に非表示、Enter で小窓を閉じつつブラウザへクエリを渡す。Tab キーでインデックス選択の切り替えが可能。
 - **DOCSEARCH-F03: docsearch web-ui**
   - **概要**: 内蔵 Web サーバー（Go `net/http`）により、ブラウザ上にリッチな検索結果画面を表示し、検索条件の修正やインデックス絞り込みを即時実行する。
   - **対応要件**: DOCSEARCH-03
@@ -243,6 +244,10 @@
   - **概要**: 実行された検索キーワードをローカルファイル（`history.json`）に永続化し、小窓および WebUI 入力時に入力文字列と前方一致・部分一致する候補をリアルタイムにサジェスト表示する。
   - **対応要件**: DOCSEARCH-06
   - **設計のポイント**: 検索実行時に `AddHistory(query)` で利用頻度 (`use_count`) と最終利用日時 (`last_used_at`) を更新。インクリメンタルサジェスト時は頻度順・日時順でソートした上位10件を返却。上下キー操作で入力補完可能。
+- **DOCSEARCH-F07: docsearch index-management**
+  - **概要**: 登録済みインデックスファイルの起動時/表示時実在性ヘルスチェック、およびファイル/フォルダ選択ダイアログによる `.bleve` インデックスの動的追加・永続化を行う。
+  - **対応要件**: DOCSEARCH-07
+  - **設計のポイント**: 登録済みインデックスのパスを `os.Stat` で走査し、存在しないものはタグ上で `⚠️ (見つかりません)` と表示して選択不可化。有効インデックスが 0 件のときはフィードバック警告メッセージを表示。小窓上の `[＋ 追加]` ボタンから `GetOpenFileNameW` / `IFileDialog` を起動し、選択された `.bleve` パスを `docsearch.json` に追加保存（`SaveConfig`）して即時反映。
 
 ---
 
@@ -571,6 +576,8 @@ graph LR
 | `pkg/docsearch` | `OpenDocument(filePath)` | ファイル絶対パス | OS にファイル/フォルダのオープンを指示 | 実行結果エラー |
 | `pkg/docsearch` | `AddHistory(query)` | 検索キーワード | 検索履歴ファイル（`history.json`）の利用日時・回数を更新永続化 | エラー（失敗時） |
 | `pkg/docsearch` | `GetSuggestions(prefix, limit)` | 入力中文字列プレフィックス, 上限件数 | 履歴から部分一致・前方一致で候補を検索し頻度・日時順ソート | 候補文字列一覧 |
+| `pkg/docsearch` | `ValidateIndexes(indexes)` | インデックス設定一覧 | 各インデックスパスの実在性を `os.Stat` で検証 | 有効インデックス一覧, 欠損インデックス一覧 |
+| `pkg/docsearch` | `OpenIndexDialog()` | 親ウィンドウハンドル | Windows フォルダ/ファイル選択ダイアログを表示して `.bleve` パスを取得 | 選択パス, キャンセル判定, エラー |
 
 ---
 
