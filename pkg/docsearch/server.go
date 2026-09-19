@@ -48,6 +48,13 @@ type SuggestResponse struct {
 	Suggestions []string `json:"suggestions"`
 }
 
+// ExpandResponse represents the response for query expansion.
+type ExpandResponse struct {
+	Status           string   `json:"status"`
+	Query            string   `json:"query"`
+	ExpandedKeywords []string `json:"expanded_keywords"`
+}
+
 // OpenRequest represents the request body for opening a document.
 type OpenRequest struct {
 	Path   string `json:"path"`
@@ -65,13 +72,14 @@ var execCommandFn = exec.Command
 
 // Server manages the local HTTP REST server and Bleve search indexes.
 type Server struct {
-	config      *Config
-	historyPath string
-	mu          sync.RWMutex
-	wg          sync.WaitGroup
-	indexPool   map[string]bleve.Index // indexID -> bleve.Index
-	httpServer  *http.Server
-	listener    net.Listener
+	config           *Config
+	historyPath      string
+	expansionService *ExpansionService
+	mu               sync.RWMutex
+	wg               sync.WaitGroup
+	indexPool        map[string]bleve.Index // indexID -> bleve.Index
+	httpServer       *http.Server
+	listener         net.Listener
 }
 
 // NewServer creates a new Server instance with the specified configuration and history path.
@@ -80,10 +88,18 @@ func NewServer(cfg *Config, historyPath string) (*Server, error) {
 		cfg = DefaultConfig()
 	}
 	return &Server{
-		config:      cfg,
-		historyPath: historyPath,
-		indexPool:   make(map[string]bleve.Index),
+		config:           cfg,
+		historyPath:      historyPath,
+		expansionService: NewExpansionService(cfg.LLM, nil),
+		indexPool:        make(map[string]bleve.Index),
 	}, nil
+}
+
+// SetExpansionService sets the ExpansionService instance (useful for testing and dependency injection).
+func (s *Server) SetExpansionService(svc *ExpansionService) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expansionService = svc
 }
 
 // getOrOpenIndex opens or returns a cached Bleve index for the specified index config.
@@ -278,12 +294,22 @@ func (s *Server) MultiIndexSearch(query string, indexIDs []string, limit int) (*
 		})
 	}
 
+	var expandedKeywords []string
+	s.mu.RLock()
+	expSvc := s.expansionService
+	s.mu.RUnlock()
+	if expSvc != nil {
+		expandedKeywords = expSvc.ExpandQuery(context.Background(), trimmedQuery)
+	} else {
+		expandedKeywords = make([]string, 0)
+	}
+
 	return &SearchResponse{
 		Status:           "success",
 		Query:            trimmedQuery,
 		TotalHits:        int(searchRes.Total),
 		IndexCounts:      indexCounts,
-		ExpandedKeywords: make([]string, 0),
+		ExpandedKeywords: expandedKeywords,
 		Results:          results,
 	}, nil
 }
@@ -325,6 +351,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/history/suggest", s.handleSuggest)
+	mux.HandleFunc("/api/expand", s.handleExpand)
 	mux.HandleFunc("/api/open", s.handleOpen)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -404,6 +431,37 @@ func (s *Server) handleSuggest(w http.ResponseWriter, r *http.Request) {
 		Status:      "success",
 		Prefix:      prefix,
 		Suggestions: suggestions,
+	})
+}
+
+func (s *Server) handleExpand(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+
+	s.mu.RLock()
+	expSvc := s.expansionService
+	s.mu.RUnlock()
+
+	var keywords []string
+	if expSvc != nil {
+		keywords = expSvc.ExpandQuery(r.Context(), q)
+	} else {
+		trimmed := strings.TrimSpace(q)
+		if trimmed != "" {
+			keywords = []string{trimmed}
+		} else {
+			keywords = []string{}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, ExpandResponse{
+		Status:           "success",
+		Query:            q,
+		ExpandedKeywords: keywords,
 	})
 }
 
