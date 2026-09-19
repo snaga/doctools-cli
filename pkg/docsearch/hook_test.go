@@ -384,6 +384,10 @@ func TestHookCallback_Simulation(t *testing.T) {
 	activeHookMu.Unlock()
 	processHookEvent(wmKeyDown, &kbd)
 
+	// Test hookCallback bypass when lParam == 0 or nCode < 0
+	hookCallback(-1, wmKeyDown, 0)
+	hookCallback(0, wmKeyDown, 0)
+
 	// Process method test
 	detector := hook.Detector()
 	detector.Reset()
