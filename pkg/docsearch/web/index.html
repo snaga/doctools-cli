@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocSearch - Desktop Document Search</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --highlight: #fef08a;
+      --radius: 8px;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 24px;
+    }
+    .header-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .search-wrapper {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .search-input-box {
+      display: flex;
+      gap: 8px;
+    }
+    .search-input {
+      flex: 1;
+      font-size: 16px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background: #ffffff;
+    }
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .search-btn {
+      padding: 12px 24px;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .search-btn:hover {
+      background: var(--primary-hover);
+    }
+    /* Suggestions Dropdown */
+    .suggestions-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      margin-top: 4px;
+      z-index: 50;
+      list-style: none;
+      overflow: hidden;
+      display: none;
+    }
+    .suggestion-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .suggestion-item:hover, .suggestion-item.active {
+      background-color: #f1f5f9;
+      color: var(--primary);
+    }
+    .suggestion-icon {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    /* Index Filters */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 10px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .filter-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .filter-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .filter-checkbox-item input {
+      cursor: pointer;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 9999px;
+      background: #e2e8f0;
+      color: #334155;
+    }
+    /* Expansion Tags */
+    .expansion-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 20px;
+      min-height: 28px;
+    }
+    .expansion-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .expansion-tag {
+      padding: 4px 10px;
+      background: #eff6ff;
+      color: var(--primary);
+      border: 1px solid #bfdbfe;
+      border-radius: 9999px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .expansion-tag:hover {
+      background: #dbeafe;
+      border-color: var(--primary);
+    }
+    /* Results */
+    .results-meta {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .result-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .result-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .result-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+    }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .result-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .result-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+    .type-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .type-pdf { background: #fee2e2; color: #b91c1c; }
+    .type-excel, .type-xlsx, .type-xls { background: #dcfce7; color: #15803d; }
+    .type-pptx, .type-ppt { background: #ffedd5; color: #c2410c; }
+    .type-docx, .type-doc, .type-text, .type-csv { background: #e0e7ff; color: #4338ca; }
+    .index-badge {
+      background: #f1f5f9;
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .result-path {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .result-snippet {
+      font-size: 14px;
+      color: #334155;
+      background: #f8fafc;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+    mark {
+      background: var(--highlight);
+      font-weight: 600;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .result-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .action-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #ffffff;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s;
+    }
+    .action-btn:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      color: var(--text-muted);
+      background: var(--card-bg);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+      display: none;
+      z-index: 100;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-title">
+        <span>🔍</span> DocSearch
+      </div>
+
+      <div class="search-wrapper">
+        <div class="search-input-box">
+          <input
+            type="text"
+            id="searchInput"
+            class="search-input"
+            placeholder="ドキュメントを全文検索... (Esc: クリア, ↑↓: 候補選択)"
+            autocomplete="off"
+          />
+          <button id="searchBtn" class="search-btn">検索</button>
+        </div>
+        <ul id="suggestionsList" class="suggestions-list"></ul>
+      </div>
+
+      <div class="filter-bar" id="filterBar">
+        <span class="filter-label">対象インデックス:</span>
+        <div id="indexCheckboxes" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
+      </div>
+
+      <div class="expansion-bar" id="expansionBar" style="display: none;">
+        <span class="expansion-label">関連キーワード:</span>
+        <div id="expansionTags" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+      </div>
+    </header>
+
+    <main>
+      <div id="resultsMeta" class="results-meta" style="display: none;"></div>
+      <div id="resultsList" class="result-list"></div>
+      <div id="emptyState" class="empty-state">
+        検索キーワードを入力して検索してください。
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let activeSuggestionIndex = -1;
+    let suggestionsData = [];
+    let debounceTimer = null;
+    let selectedIndexes = new Set();
+    let indexConfigs = [];
+
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const suggestionsList = document.getElementById('suggestionsList');
+    const indexCheckboxes = document.getElementById('indexCheckboxes');
+    const expansionBar = document.getElementById('expansionBar');
+    const expansionTags = document.getElementById('expansionTags');
+    const resultsMeta = document.getElementById('resultsMeta');
+    const resultsList = document.getElementById('resultsList');
+    const emptyState = document.getElementById('emptyState');
+    const toast = document.getElementById('toast');
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.style.display = 'block';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 3000);
+    }
+
+    async function loadSuggestions(prefix) {
+      if (!prefix.trim()) {
+        hideSuggestions();
+        return;
+      }
+      try {
+        const res = await fetch(`/api/history/suggest?prefix=${encodeURIComponent(prefix)}&limit=8`);
+        if (!res.ok) return;
+        const data = await res.json();
+        suggestionsData = data.suggestions || [];
+        renderSuggestions();
+      } catch (err) {
+        console.error('Suggest error:', err);
+      }
+    }
+
+    function renderSuggestions() {
+      if (suggestionsData.length === 0) {
+        hideSuggestions();
+        return;
+      }
+      suggestionsList.innerHTML = '';
+      suggestionsData.forEach((sug, idx) => {
+        const li = document.createElement('li');
+        li.className = 'suggestion-item' + (idx === activeSuggestionIndex ? ' active' : '');
+        li.innerHTML = `<span class="suggestion-icon">🕒</span> <span>${escapeHTML(sug)}</span>`;
+        li.addEventListener('click', () => {
+          searchInput.value = sug;
+          hideSuggestions();
+          executeSearch();
+        });
+        suggestionsList.appendChild(li);
+      });
+      suggestionsList.style.display = 'block';
+    }
+
+    function hideSuggestions() {
+      suggestionsList.style.display = 'none';
+      activeSuggestionIndex = -1;
+    }
+
+    async function loadExpansions(query) {
+      if (!query.trim()) {
+        expansionBar.style.display = 'none';
+        return;
+      }
+      try {
+        const res = await fetch(`/api/expand?q=${encodeURIComponent(query)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const keywords = data.expanded_keywords || [];
+        renderExpansions(keywords, query);
+      } catch (err) {
+        expansionBar.style.display = 'none';
+      }
+    }
+
+    function renderExpansions(keywords, currentQuery) {
+      const filtered = keywords.filter(k => k.toLowerCase() !== currentQuery.trim().toLowerCase());
+      if (filtered.length === 0) {
+        expansionBar.style.display = 'none';
+        return;
+      }
+      expansionTags.innerHTML = '';
+      filtered.forEach(kw => {
+        const btn = document.createElement('button');
+        btn.className = 'expansion-tag';
+        btn.textContent = '+ ' + kw;
+        btn.addEventListener('click', () => {
+          searchInput.value = `${searchInput.value.trim()} ${kw}`;
+          executeSearch();
+        });
+        expansionTags.appendChild(btn);
+      });
+      expansionBar.style.display = 'flex';
+    }
+
+    async function executeSearch() {
+      const query = searchInput.value.trim();
+      hideSuggestions();
+
+      if (!query) {
+        resultsList.innerHTML = '';
+        resultsMeta.style.display = 'none';
+        expansionBar.style.display = 'none';
+        emptyState.style.display = 'block';
+        emptyState.textContent = '検索キーワードを入力してください。';
+        updateURL(query);
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      resultsList.innerHTML = '<div style="text-align: center; padding: 32px; color: var(--text-muted);">検索中...</div>';
+
+      updateURL(query);
+      loadExpansions(query);
+
+      try {
+        let url = `/api/search?q=${encodeURIComponent(query)}&limit=50`;
+        if (selectedIndexes.size > 0) {
+          url += `&indexes=${Array.from(selectedIndexes).join(',')}`;
+        }
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Search request failed');
+        const data = await res.json();
+
+        renderIndexCheckboxes(data.index_counts || {});
+        renderResults(data);
+      } catch (err) {
+        resultsList.innerHTML = '';
+        emptyState.style.display = 'block';
+        emptyState.textContent = `検索中にエラーが発生しました: ${err.message}`;
+      }
+    }
+
+    function renderIndexCheckboxes(counts) {
+      // If index checkboxes are not yet created, discover from counts
+      const keys = Object.keys(counts);
+      if (keys.length === 0) return;
+
+      indexCheckboxes.innerHTML = '';
+      keys.forEach(id => {
+        const label = document.createElement('label');
+        label.className = 'filter-checkbox-item';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.value = id;
+        chk.checked = selectedIndexes.size === 0 || selectedIndexes.has(id);
+
+        chk.addEventListener('change', () => {
+          if (chk.checked) {
+            selectedIndexes.add(id);
+          } else {
+            selectedIndexes.delete(id);
+          }
+          executeSearch();
+        });
+
+        label.appendChild(chk);
+        label.appendChild(document.createTextNode(id + ' '));
+
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = counts[id] || 0;
+        label.appendChild(badge);
+
+        indexCheckboxes.appendChild(label);
+      });
+    }
+
+    function renderResults(data) {
+      resultsList.innerHTML = '';
+      const hits = data.results || [];
+
+      resultsMeta.style.display = 'block';
+      resultsMeta.textContent = `${data.total_hits || hits.length} 件のドキュメントが見つかりました`;
+
+      if (hits.length === 0) {
+        emptyState.style.display = 'block';
+        emptyState.textContent = '一致するドキュメントは見つかりませんでした。';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      hits.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'result-card';
+
+        const fileType = (item.file_type || '').toLowerCase();
+        let typeClass = 'type-' + fileType;
+
+        let pageInfo = '';
+        if (item.page > 0) {
+          pageInfo = `<span class="index-badge">P.${item.page}</span>`;
+        }
+
+        let indexInfo = '';
+        if (item.index_name || item.index_id) {
+          indexInfo = `<span class="index-badge">📂 ${escapeHTML(item.index_name || item.index_id)}</span>`;
+        }
+
+        card.innerHTML = `
+          <div class="result-header">
+            <div class="result-title-group">
+              <span class="type-badge ${typeClass}">${escapeHTML(fileType || 'DOC')}</span>
+              <span class="result-title">${escapeHTML(item.file_name || '無題')}</span>
+              ${pageInfo}
+              ${indexInfo}
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">スコア: ${item.score ? item.score.toFixed(2) : '-'}</span>
+          </div>
+          <div class="result-path">${escapeHTML(item.file_path || '')}</div>
+          <div class="result-snippet">${item.snippet || '本文プレビューなし'}</div>
+          <div class="result-actions">
+            <button class="action-btn" onclick="openFile('${escapeJsStr(item.file_path)}', false)">📄 ファイルを開く</button>
+            <button class="action-btn" onclick="openFile('${escapeJsStr(item.file_path)}', true)">📁 フォルダで表示</button>
+          </div>
+        `;
+        resultsList.appendChild(card);
+      });
+    }
+
+    async function openFile(filePath, selectInFolder) {
+      try {
+        const res = await fetch('/api/open', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: filePath, select: selectInFolder }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(selectInFolder ? 'フォルダを開きました' : 'ドキュメントを開きました');
+        } else {
+          showToast(`開けませんでした: ${data.message || 'エラー'}`);
+        }
+      } catch (err) {
+        showToast(`エラー: ${err.message}`);
+      }
+    }
+
+    function updateURL(query) {
+      const url = new URL(window.location);
+      if (query) {
+        url.searchParams.set('q', query);
+      } else {
+        url.searchParams.delete('q');
+      }
+      if (selectedIndexes.size > 0) {
+        url.searchParams.set('indexes', Array.from(selectedIndexes).join(','));
+      } else {
+        url.searchParams.delete('indexes');
+      }
+      window.history.replaceState({}, '', url);
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeJsStr(str) {
+      if (!str) return '';
+      return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    // Event Listeners
+    searchInput.addEventListener('input', (e) => {
+      const val = e.target.value;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadSuggestions(val);
+      }, 200);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (suggestionsList.style.display === 'block') {
+        const items = suggestionsList.querySelectorAll('.suggestion-item');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeSuggestionIndex = (activeSuggestionIndex + 1) % items.length;
+          renderSuggestions();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeSuggestionIndex = (activeSuggestionIndex - 1 + items.length) % items.length;
+          renderSuggestions();
+        } else if (e.key === 'Enter' && activeSuggestionIndex >= 0) {
+          e.preventDefault();
+          searchInput.value = suggestionsData[activeSuggestionIndex];
+          hideSuggestions();
+          executeSearch();
+        } else if (e.key === 'Escape') {
+          hideSuggestions();
+        }
+      } else if (e.key === 'Enter') {
+        executeSearch();
+      }
+    });
+
+    searchBtn.addEventListener('click', executeSearch);
+
+    document.addEventListener('click', (e) => {
+      if (!searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+        hideSuggestions();
+      }
+    });
+
+    // Initial Load from URL
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('q');
+      const idxs = params.get('indexes');
+
+      if (idxs) {
+        idxs.split(',').forEach(id => {
+          const trimmed = id.trim();
+          if (trimmed) selectedIndexes.add(trimmed);
+        });
+      }
+
+      if (q) {
+        searchInput.value = q;
+        executeSearch();
+      }
+    });
+  </script>
+</body>
+</html>

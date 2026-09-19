@@ -2,6 +2,7 @@ package docsearch
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -17,6 +18,9 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 )
+
+//go:embed web/*
+var webFS embed.FS
 
 // SearchResultItem represents a single document hit in multi-index search.
 type SearchResultItem struct {
@@ -349,6 +353,7 @@ func OpenDocument(path string, selectInFolder bool) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/history/suggest", s.handleSuggest)
 	mux.HandleFunc("/api/expand", s.handleExpand)
@@ -367,6 +372,25 @@ func (s *Server) Handler() http.Handler {
 
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		http.Error(w, "WebUI asset not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
