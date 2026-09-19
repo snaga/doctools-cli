@@ -56,6 +56,7 @@ const (
 	ssLeft        = 0x0000
 
 	bsAutoCheckbox = 0x00000003
+	bsPushButton   = 0x00000000
 	bmGetCheck     = 0x00F0
 	bmSetCheck     = 0x00F1
 	bstUnchecked   = 0x0000
@@ -70,6 +71,7 @@ const (
 	emSetSel = 0x00B1
 
 	wmSetFont        = 0x0030
+	wmCommand        = 0x0111
 	wmCtlColorStatic = 0x0138
 	wmClose   = 0x0010
 	wmDestroy = 0x0002
@@ -103,12 +105,25 @@ var (
 	wndClassAtom uint16
 	classMu      sync.Mutex
 	wndClassName = windows.StringToUTF16Ptr("DocSearchFloatingWindow")
+
+	windowMapMu sync.RWMutex
+	windowMap   = make(map[uintptr]*SearchWindow)
 )
 
 func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
 	switch msg {
 	case wmDestroy:
 		return 0
+	case wmCommand:
+		windowMapMu.RLock()
+		w := windowMap[hWnd]
+		windowMapMu.RUnlock()
+		if w != nil && lParam != 0 && lParam == w.addBtnHWnd {
+			go w.handleAddIndexClicked()
+			return 0
+		}
+		ret, _, _ := procDefWindowProcW.Call(hWnd, uintptr(msg), wParam, lParam)
+		return ret
 	case wmCtlColorStatic:
 		// Amber/Red color for warning static label: RGB(204, 32, 0) -> 0x000020CC
 		procSetTextColor.Call(wParam, uintptr(0x000020CC))
@@ -123,17 +138,20 @@ func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uin
 
 // SearchWindow represents the native Win32 floating search window.
 type SearchWindow struct {
-	mu          sync.RWMutex
-	indexes     []IndexConfig
-	onSearch    SearchCallback
-	options     WindowOptions
-	visible     bool
-	closed      bool
-	hasWarning  bool
+	mu           sync.RWMutex
+	indexes      []IndexConfig
+	onSearch     SearchCallback
+	onIndexAdded IndexAddedCallback
+	configPath   string
+	options      WindowOptions
+	visible      bool
+	closed       bool
+	hasWarning   bool
 
 	hwnd        uintptr
 	editHWnd    uintptr
 	warningHWnd uintptr
+	addBtnHWnd  uintptr
 	checkHWnds  []uintptr
 	threadID    uint32
 	done        chan struct{}
@@ -210,6 +228,10 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 
 		w.hwnd = hwnd
 
+		windowMapMu.Lock()
+		windowMap[hwnd] = w
+		windowMapMu.Unlock()
+
 		// Stock GUI font
 		hFont, _, _ := procGetStockObject.Call(uintptr(defaultGuiFont))
 
@@ -248,7 +270,7 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			uintptr(wsChild|ssLeft),
 			uintptr(16),
 			uintptr(56),
-			uintptr(opts.Width-32),
+			uintptr(opts.Width-32-78),
 			uintptr(24),
 			hwnd,
 			0,
@@ -258,6 +280,60 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 		w.warningHWnd = warningHWnd
 		if warningHWnd != 0 && hFont != 0 {
 			procSendMessageW.Call(warningHWnd, uintptr(wmSetFont), hFont, 1)
+		}
+
+		// Create [＋ 追加] Button
+		btnClass := windows.StringToUTF16Ptr("BUTTON")
+		addBtnText := windows.StringToUTF16Ptr("[＋ 追加]")
+		addBtnX := opts.Width - 16 - 74
+		addBtnHWnd, _, _ := procCreateWindowExW.Call(
+			0,
+			uintptr(unsafe.Pointer(btnClass)),
+			uintptr(unsafe.Pointer(addBtnText)),
+			uintptr(wsChild|wsVisible|wsTabStop|bsPushButton),
+			uintptr(addBtnX),
+			uintptr(56),
+			uintptr(74),
+			uintptr(24),
+			hwnd,
+			0,
+			hInst,
+			0,
+		)
+		w.addBtnHWnd = addBtnHWnd
+		if addBtnHWnd != 0 && hFont != 0 {
+			procSendMessageW.Call(addBtnHWnd, uintptr(wmSetFont), hFont, 1)
+		}
+
+		// Pre-create checkbox controls pool on GUI thread
+		const maxCheckboxes = 16
+		for i := 0; i < maxCheckboxes; i++ {
+			chkHWnd, _, _ := procCreateWindowExW.Call(
+				0,
+				uintptr(unsafe.Pointer(btnClass)),
+				0,
+				uintptr(wsChild|wsTabStop|bsAutoCheckbox),
+				uintptr(16),
+				uintptr(56),
+				uintptr(80),
+				uintptr(24),
+				hwnd,
+				0,
+				hInst,
+				0,
+			)
+			if chkHWnd != 0 {
+				if hFont != 0 {
+					procSendMessageW.Call(chkHWnd, uintptr(wmSetFont), hFont, 1)
+				}
+				w.checkHWnds = append(w.checkHWnds, chkHWnd)
+			}
+		}
+
+		for i, idx := range w.indexes {
+			if idx.DefaultSelected && i < len(w.checkHWnds) {
+				procSendMessageW.Call(w.checkHWnds[i], uintptr(bmSetCheck), uintptr(bstChecked), 0)
+			}
 		}
 
 		// Initialize checkboxes and health check status
@@ -334,11 +410,16 @@ func (w *SearchWindow) focusNextControl() {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	controls := make([]uintptr, 0, 1+len(w.checkHWnds))
+	controls := make([]uintptr, 0, 2+len(w.indexes))
 	if w.editHWnd != 0 {
 		controls = append(controls, w.editHWnd)
 	}
-	controls = append(controls, w.checkHWnds...)
+	for i := 0; i < len(w.indexes) && i < len(w.checkHWnds); i++ {
+		controls = append(controls, w.checkHWnds[i])
+	}
+	if w.addBtnHWnd != 0 {
+		controls = append(controls, w.addBtnHWnd)
+	}
 
 	if len(controls) == 0 {
 		return
@@ -373,16 +454,12 @@ func (w *SearchWindow) refreshIndexHealthLocked() {
 
 	w.hasWarning = (validCount == 0)
 
-	hInst, _, _ := procGetModuleHandleW.Call(0)
-	hFont, _, _ := procGetStockObject.Call(uintptr(defaultGuiFont))
-	btnClass := windows.StringToUTF16Ptr("BUTTON")
-
 	if validCount == 0 {
 		// Show warning label
 		if w.warningHWnd != 0 {
 			procShowWindow.Call(w.warningHWnd, uintptr(swShow))
 		}
-		// Hide checkboxes
+		// Hide all checkboxes
 		for _, chkHWnd := range w.checkHWnds {
 			procShowWindow.Call(chkHWnd, uintptr(swHide))
 		}
@@ -398,67 +475,40 @@ func (w *SearchWindow) refreshIndexHealthLocked() {
 	chkY := 56
 	chkHeight := 24
 
-	// Dynamically create checkbox handles if more indexes were provided
-	for len(w.checkHWnds) < len(w.indexes) {
-		idxIdx := len(w.checkHWnds)
-		newChk, _, _ := procCreateWindowExW.Call(
-			0,
-			uintptr(unsafe.Pointer(btnClass)),
-			0,
-			uintptr(wsChild|wsTabStop|bsAutoCheckbox),
-			uintptr(chkX),
-			uintptr(chkY),
-			uintptr(80),
-			uintptr(chkHeight),
-			w.hwnd,
-			0,
-			hInst,
-			0,
-		)
-		if newChk != 0 {
-			if hFont != 0 {
-				procSendMessageW.Call(newChk, uintptr(wmSetFont), hFont, 1)
-			}
-			if idxIdx < len(w.indexes) && w.indexes[idxIdx].DefaultSelected {
-				procSendMessageW.Call(newChk, uintptr(bmSetCheck), uintptr(bstChecked), 0)
-			}
-		}
-		w.checkHWnds = append(w.checkHWnds, newChk)
-	}
-
-	// Update each checkbox
-	for i, s := range statuses {
+	// Update each checkbox from pre-created pool
+	for i := 0; i < len(w.checkHWnds); i++ {
 		chkHWnd := w.checkHWnds[i]
-		if s.Exists {
-			namePtr := windows.StringToUTF16Ptr(s.Index.Name)
-			procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(namePtr)))
-			procEnableWindow.Call(chkHWnd, 1)
-			chkWidth := len([]rune(s.Index.Name))*16 + 32
-			if chkWidth < 80 {
-				chkWidth = 80
+		if i < len(w.indexes) {
+			s := statuses[i]
+			if s.Exists {
+				namePtr := windows.StringToUTF16Ptr(s.Index.Name)
+				procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(namePtr)))
+				procEnableWindow.Call(chkHWnd, 1)
+				chkWidth := len([]rune(s.Index.Name))*16 + 32
+				if chkWidth < 80 {
+					chkWidth = 80
+				}
+				procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
+				procShowWindow.Call(chkHWnd, uintptr(swShow))
+				chkX += chkWidth + 8
+			} else {
+				label := FormatMissingIndexLabel(s.Index.Name)
+				labelPtr := windows.StringToUTF16Ptr(label)
+				procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(labelPtr)))
+				procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(bstUnchecked), 0)
+				procEnableWindow.Call(chkHWnd, 0)
+				chkWidth := len([]rune(label))*14 + 32
+				if chkWidth < 120 {
+					chkWidth = 120
+				}
+				procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
+				procShowWindow.Call(chkHWnd, uintptr(swShow))
+				chkX += chkWidth + 8
 			}
-			procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
-			procShowWindow.Call(chkHWnd, uintptr(swShow))
-			chkX += chkWidth + 8
 		} else {
-			label := FormatMissingIndexLabel(s.Index.Name)
-			labelPtr := windows.StringToUTF16Ptr(label)
-			procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(labelPtr)))
-			procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(bstUnchecked), 0)
-			procEnableWindow.Call(chkHWnd, 0)
-			chkWidth := len([]rune(label))*14 + 32
-			if chkWidth < 120 {
-				chkWidth = 120
-			}
-			procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
-			procShowWindow.Call(chkHWnd, uintptr(swShow))
-			chkX += chkWidth + 8
+			// Hide unused checkboxes in pool
+			procShowWindow.Call(chkHWnd, uintptr(swHide))
 		}
-	}
-
-	// Hide any extra checkboxes
-	for j := len(w.indexes); j < len(w.checkHWnds); j++ {
-		procShowWindow.Call(w.checkHWnds[j], uintptr(swHide))
 	}
 }
 
@@ -603,6 +653,106 @@ func (w *SearchWindow) SetIndexes(indexes []IndexConfig) {
 	defer w.mu.Unlock()
 	w.indexes = indexes
 	w.refreshIndexHealthLocked()
+	for i, idx := range w.indexes {
+		if idx.DefaultSelected && i < len(w.checkHWnds) {
+			procSendMessageW.Call(w.checkHWnds[i], uintptr(bmSetCheck), uintptr(bstChecked), 0)
+		}
+	}
+}
+
+// handleAddIndexClicked is triggered when the [＋ 追加] button is clicked.
+func (w *SearchWindow) handleAddIndexClicked() {
+	w.mu.RLock()
+	hwnd := w.hwnd
+	w.mu.RUnlock()
+
+	path, ok, err := OpenIndexDialog(hwnd)
+	if err != nil || !ok || path == "" {
+		return
+	}
+
+	newIdx, err := GenerateIndexConfigFromPath(path)
+	if err != nil {
+		return
+	}
+
+	w.AddIndex(newIdx)
+}
+
+// AddIndex adds a new index dynamically, updating selection, health, and persistence.
+func (w *SearchWindow) AddIndex(newIdx IndexConfig) {
+	w.mu.Lock()
+	for _, idx := range w.indexes {
+		if idx.Path == newIdx.Path || idx.ID == newIdx.ID {
+			w.mu.Unlock()
+			return
+		}
+	}
+	w.indexes = append(w.indexes, newIdx)
+	configPath := w.configPath
+	onAdded := w.onIndexAdded
+	w.refreshIndexHealthLocked()
+
+	// By default, check newly added index
+	for i, idx := range w.indexes {
+		if idx.ID == newIdx.ID && i < len(w.checkHWnds) {
+			procSendMessageW.Call(w.checkHWnds[i], uintptr(bmSetCheck), uintptr(bstChecked), 0)
+			break
+		}
+	}
+	w.mu.Unlock()
+
+	if configPath != "" {
+		if cfg, err := LoadConfig(configPath); err == nil {
+			alreadyInCfg := false
+			for _, idx := range cfg.Indexes {
+				if idx.Path == newIdx.Path || idx.ID == newIdx.ID {
+					alreadyInCfg = true
+					break
+				}
+			}
+			if !alreadyInCfg {
+				cfg.Indexes = append(cfg.Indexes, newIdx)
+				_ = SaveConfig(configPath, cfg)
+			}
+		}
+	}
+
+	if onAdded != nil {
+		go onAdded(newIdx)
+	}
+}
+
+// SetOnIndexAdded registers a callback to be invoked when a new index is added.
+func (w *SearchWindow) SetOnIndexAdded(cb IndexAddedCallback) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.onIndexAdded = cb
+}
+
+// SetConfigPath sets the config file path for automatic persistence.
+func (w *SearchWindow) SetConfigPath(path string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.configPath = path
+}
+
+// TriggerAddIndex simulates the user clicking the add index button and completing the dialog.
+func (w *SearchWindow) TriggerAddIndex() (string, bool, error) {
+	w.mu.RLock()
+	hwnd := w.hwnd
+	w.mu.RUnlock()
+
+	path, ok, err := OpenIndexDialog(hwnd)
+	if err != nil || !ok || path == "" {
+		return "", ok, err
+	}
+	newIdx, err := GenerateIndexConfigFromPath(path)
+	if err != nil {
+		return "", false, err
+	}
+	w.AddIndex(newIdx)
+	return path, true, nil
 }
 
 // Close destroys the Win32 window and terminates its message loop.
@@ -619,6 +769,10 @@ func (w *SearchWindow) Close() error {
 	w.mu.Unlock()
 
 	if hwnd != 0 {
+		windowMapMu.Lock()
+		delete(windowMap, hwnd)
+		windowMapMu.Unlock()
+
 		procDestroyWindow.Call(hwnd)
 	}
 	if threadID != 0 {

@@ -18,6 +18,9 @@ type SearchWindowController interface {
 	GetSelectedIndexes() []string
 	SetSelectedIndexes(ids []string)
 	SetIndexes(indexes []IndexConfig)
+	AddIndex(newIdx IndexConfig)
+	SetOnIndexAdded(cb IndexAddedCallback)
+	SetConfigPath(path string)
 	Close() error
 }
 
