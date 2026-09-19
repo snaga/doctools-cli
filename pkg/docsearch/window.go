@@ -21,6 +21,7 @@ type SearchWindowController interface {
 	AddIndex(newIdx IndexConfig)
 	SetOnIndexAdded(cb IndexAddedCallback)
 	SetConfigPath(path string)
+	CustomFont() uintptr
 	Close() error
 }
 
@@ -36,7 +37,7 @@ func DefaultWindowOptions() WindowOptions {
 	return WindowOptions{
 		Width:       560,
 		Height:      110,
-		Placeholder: "Search documents...",
+		Placeholder: "🔍 ドキュメントを検索... (Escで閉じる)",
 	}
 }
 

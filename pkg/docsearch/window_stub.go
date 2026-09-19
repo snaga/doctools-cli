@@ -216,3 +216,8 @@ func (w *SearchWindow) Close() error {
 	w.visible = false
 	return nil
 }
+
+// CustomFont returns a stub font handle for testing.
+func (w *SearchWindow) CustomFont() uintptr {
+	return 1
+}

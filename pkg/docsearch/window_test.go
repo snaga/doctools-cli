@@ -346,3 +346,30 @@ func TestSearchWindow_HealthCheck_DynamicUpdate(t *testing.T) {
 		t.Errorf("expected 'valid1' to be selected, got: %v", selected)
 	}
 }
+
+func TestSearchWindow_ModernStyling(t *testing.T) {
+	indexes := sampleIndexes(t)
+	w, err := NewSearchWindow(indexes, nil)
+	if err != nil {
+		t.Fatalf("Failed to create SearchWindow: %v", err)
+	}
+
+	// 1. Verify custom modern font was generated
+	hFont := w.CustomFont()
+	if hFont == 0 {
+		t.Errorf("expected non-zero customFont handle")
+	}
+
+	// 2. Verify window options has default modern placeholder
+	if w.options.Placeholder != "🔍 ドキュメントを検索... (Escで閉じる)" {
+		t.Errorf("unexpected placeholder: %q", w.options.Placeholder)
+	}
+
+	// 3. Close window and verify font cleanup
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	if w.CustomFont() != 0 {
+		t.Errorf("expected customFont to be reset to 0 after Close")
+	}
+}

@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	gdi32 = windows.NewLazySystemDLL("gdi32.dll")
+	gdi32  = windows.NewLazySystemDLL("gdi32.dll")
+	dwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 
 	procRegisterClassExW      = user32.NewProc("RegisterClassExW")
 	procUnregisterClassW      = user32.NewProc("UnregisterClassW")
@@ -34,11 +35,16 @@ var (
 	procGetSystemMetrics      = user32.NewProc("GetSystemMetrics")
 	procEnableWindow          = user32.NewProc("EnableWindow")
 	procPostMessageW          = user32.NewProc("PostMessageW")
+	procSetWindowRgn          = user32.NewProc("SetWindowRgn")
 	procCreateSolidBrush      = gdi32.NewProc("CreateSolidBrush")
 	procGetStockObject        = gdi32.NewProc("GetStockObject")
 	procDeleteObject          = gdi32.NewProc("DeleteObject")
 	procSetTextColor          = gdi32.NewProc("SetTextColor")
+	procSetBkColor            = gdi32.NewProc("SetBkColor")
 	procSetBkMode             = gdi32.NewProc("SetBkMode")
+	procCreateFontW           = gdi32.NewProc("CreateFontW")
+	procCreateRoundRectRgn    = gdi32.NewProc("CreateRoundRectRgn")
+	procDwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
 )
 
 const (
@@ -68,13 +74,18 @@ const (
 	swpNoZOrder   = 0x0004
 	swpNoActivate = 0x0010
 
-	emSetSel = 0x00B1
+	emSetSel       = 0x00B1
+	emSetCueBanner = 0x1501
 
 	wmSetFont        = 0x0030
 	wmCommand        = 0x0111
+	wmCtlColorEdit   = 0x0133
 	wmCtlColorStatic = 0x0138
-	wmClose   = 0x0010
-	wmDestroy = 0x0002
+	wmClose          = 0x0010
+	wmDestroy        = 0x0002
+
+	dwmwaWindowCornerPreference = 33
+	dwmwcpRound                 = 2
 
 	colorBtnFace      = 15
 	defaultGuiFont    = 17
@@ -108,6 +119,9 @@ var (
 
 	windowMapMu sync.RWMutex
 	windowMap   = make(map[uintptr]*SearchWindow)
+
+	editBgBrush uintptr
+	winBgBrush  uintptr
 )
 
 func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uintptr {
@@ -124,12 +138,30 @@ func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uin
 		}
 		ret, _, _ := procDefWindowProcW.Call(hWnd, uintptr(msg), wParam, lParam)
 		return ret
+	case wmCtlColorEdit:
+		procSetTextColor.Call(wParam, uintptr(0x002A170F)) // Dark slate (#0F172A)
+		procSetBkColor.Call(wParam, uintptr(0x00FFFFFF))   // Pure white (#FFFFFF)
+		if editBgBrush == 0 {
+			editBgBrush, _, _ = procCreateSolidBrush.Call(uintptr(0x00FFFFFF))
+		}
+		return editBgBrush
 	case wmCtlColorStatic:
-		// Amber/Red color for warning static label: RGB(204, 32, 0) -> 0x000020CC
-		procSetTextColor.Call(wParam, uintptr(0x000020CC))
+		windowMapMu.RLock()
+		w := windowMap[hWnd]
+		windowMapMu.RUnlock()
+
+		if w != nil && w.warningHWnd != 0 && lParam == w.warningHWnd {
+			// Red 600: RGB(220, 38, 38) -> 0x002626DC
+			procSetTextColor.Call(wParam, uintptr(0x002626DC))
+		} else {
+			// Slate 700: RGB(51, 65, 85) -> 0x00554133
+			procSetTextColor.Call(wParam, uintptr(0x00554133))
+		}
 		procSetBkMode.Call(wParam, 1) // TRANSPARENT
-		bgBrush, _, _ := procGetStockObject.Call(uintptr(colorBtnFace))
-		return bgBrush
+		if winBgBrush == 0 {
+			winBgBrush, _, _ = procCreateSolidBrush.Call(uintptr(0x00FCFAF8)) // Off-white Slate 50 (#F8FAFC)
+		}
+		return winBgBrush
 	default:
 		ret, _, _ := procDefWindowProcW.Call(hWnd, uintptr(msg), wParam, lParam)
 		return ret
@@ -147,6 +179,7 @@ type SearchWindow struct {
 	visible      bool
 	closed       bool
 	hasWarning   bool
+	customFont   uintptr
 
 	hwnd        uintptr
 	editHWnd    uintptr
@@ -182,7 +215,7 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 		hInst, _, _ := procGetModuleHandleW.Call(0)
 		if wndClassAtom == 0 {
 			wndProcPtr := syscall.NewCallback(globalWndProc)
-			bgBrush, _, _ := procCreateSolidBrush.Call(uintptr(0x00F0F0F0)) // Light gray background
+			bgBrush, _, _ := procCreateSolidBrush.Call(uintptr(0x00FCFAF8)) // Off-white Slate 50 (#F8FAFC)
 			if bgBrush == 0 {
 				bgBrush, _, _ = procGetStockObject.Call(uintptr(colorBtnFace))
 			}
@@ -232,8 +265,50 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 		windowMap[hwnd] = w
 		windowMapMu.Unlock()
 
-		// Stock GUI font
-		hFont, _, _ := procGetStockObject.Call(uintptr(defaultGuiFont))
+		// Apply rounded corners (Windows 11 DWM native or Windows 10 region fallback)
+		var cornerApplied bool
+		if procDwmSetWindowAttribute.Find() == nil {
+			var cornerPref uint32 = dwmwcpRound
+			ret, _, _ := procDwmSetWindowAttribute.Call(
+				hwnd,
+				uintptr(dwmwaWindowCornerPreference),
+				uintptr(unsafe.Pointer(&cornerPref)),
+				uintptr(unsafe.Sizeof(cornerPref)),
+			)
+			if ret == 0 {
+				cornerApplied = true
+			}
+		}
+		if !cornerApplied {
+			hRgn, _, _ := procCreateRoundRectRgn.Call(0, 0, uintptr(opts.Width), uintptr(opts.Height), 16, 16)
+			if hRgn != 0 {
+				procSetWindowRgn.Call(hwnd, hRgn, 1)
+			}
+		}
+
+		// Create modern typography font: Segoe UI (height -16 ~ 14pt)
+		fontName := windows.StringToUTF16Ptr("Segoe UI")
+		fontHeight := int32(-16)
+		hFont, _, _ := procCreateFontW.Call(
+			uintptr(fontHeight), // Height (-16 gives ~14pt crisp font)
+			0,            // Width
+			0,            // Escapement
+			0,            // Orientation
+			400,          // Weight (FW_NORMAL)
+			0,            // Italic
+			0,            // Underline
+			0,            // StrikeOut
+			1,            // DEFAULT_CHARSET
+			0,            // OUT_DEFAULT_PRECIS
+			0,            // CLIP_DEFAULT_PRECIS
+			5,            // CLEARTYPE_QUALITY
+			0,            // PitchAndFamily
+			uintptr(unsafe.Pointer(fontName)),
+		)
+		if hFont == 0 {
+			hFont, _, _ = procGetStockObject.Call(uintptr(defaultGuiFont))
+		}
+		w.customFont = hFont
 
 		// Create Edit Control (Search Bar)
 		editClass := windows.StringToUTF16Ptr("EDIT")
@@ -245,7 +320,7 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			uintptr(16),
 			uintptr(16),
 			uintptr(opts.Width-32),
-			uintptr(30),
+			uintptr(32),
 			hwnd,
 			0,
 			hInst,
@@ -259,6 +334,14 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 		if hFont != 0 {
 			procSendMessageW.Call(editHWnd, uintptr(wmSetFont), hFont, 1)
 		}
+
+		// Configure Cue Banner (placeholder text)
+		placeholder := opts.Placeholder
+		if placeholder == "" {
+			placeholder = "🔍 ドキュメントを検索... (Escで閉じる)"
+		}
+		cuePtr := windows.StringToUTF16Ptr(placeholder)
+		procSendMessageW.Call(editHWnd, uintptr(emSetCueBanner), 1, uintptr(unsafe.Pointer(cuePtr)))
 
 		// Create Warning Static Label (shown when no valid indexes exist)
 		staticClass := windows.StringToUTF16Ptr("STATIC")
@@ -787,5 +870,17 @@ func (w *SearchWindow) Close() error {
 		}
 	}
 
+	if w.customFont != 0 {
+		procDeleteObject.Call(w.customFont)
+		w.customFont = 0
+	}
+
 	return nil
+}
+
+// CustomFont returns the handle of the custom modern font created for the window controls.
+func (w *SearchWindow) CustomFont() uintptr {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.customFont
 }
