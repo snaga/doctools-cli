@@ -27,6 +27,11 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
   - **LLM Summary Generation**: 公式 Google GenAI SDK (`google.golang.org/genai`) を用いたサマリー構築。
 - **Search (全文検索)**:
   - **Bleve Search Engine**: 各種ドキュメント (Excel, PPT, PDF, CSV, Text) を On-the-fly で Markdown/CSV テキストへ変換・チャンク分割し、ファイルパスやシート名・ページ番号などのメタデータ付きでインデックス登録。スコア、前後ハイライトスニペット、AI向けナビゲーション構造 (`target`) を返却する爆速全文検索。
+- **DocSearch GUI (人間向けデスクトップ全文検索ランチャー＆WebUI)**:
+  - **独立バイナリ (`docsearch-gui.exe`)**: Agent-Native CLI の純度を保つため別バイナリとして分離。`pkg/fts` の Bleve インデックスを 100% 互換で共有。
+  - **Ctrl連打ランチャー小窓**: Win32 低レベルキーフック (`WH_KEYBOARD_LL`) による Ctrl 連打検知と、超軽量ネイティブ小窓での爆速検索受付・複数インデックス選択。
+  - **検索結果 WebUI**: ブラウザ上で検索結果の閲覧、検索条件の修正、複数インデックスの絞り込み、ファイル/フォルダの直接起動。
+  - **Query Expansion**: 軽量 LLM（Gemini 等）と連携した同義語・表記揺れの展開およびタグ選択。
 
 ## ビジネス・開発目標
 AI エージェントがローカル知識ベースを高速かつ確実に探索できる環境を提供し、応答速度の劇的向上（ミリ秒単位の起動）とトークン消費削減を達成する。

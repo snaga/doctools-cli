@@ -18,6 +18,11 @@
 - [データモデル](#データモデル)
     - [Bleve FTS インデックス構造](#bleve-fts-インデックス構造)
     - [PageIndex JSON スキーマ](#pageindex-json-スキーマ)
+    - [Excel パッチ JSON スキーマ & Go 構造体](#excel-パッチ-json-スキーマ--go-構造体-pkgexcel)
+    - [DocSearch 設定ファイルスキーマ](#docsearch-設定ファイルスキーマ-docsearchjson)
+    - [DocSearch マルチインデックス検索 REST レスポンス](#docsearch-マルチインデックス検索-rest-レスポンス-get-apisearch)
+    - [DocSearch 検索履歴スキーマ](#docsearch-検索履歴スキーマ-historyjson)
+    - [DocSearch インクリメンタルサジェスト REST レスポンス](#docsearch-インクリメンタルサジェスト-rest-レスポンス-get-apihistorysuggestprefix)
 - [エラーハンドリング](#エラーハンドリング)
 
 ---
@@ -67,6 +72,12 @@
 | 画像操作 | IMAGE-F02 | image crop | 画像の指定領域切り抜き (Crop) | IMAGE-02 |
 | 画像操作 | IMAGE-F03 | image save-clipboard | クリップボード画像の PNG 保存 (Windows) | IMAGE-03 |
 | 共通ユーティリティ | UTIL-F01 | util zip / util unzip | 複数ファイルの ZIP 圧縮、および解凍 | UTIL-01 |
+| デスクトップ検索GUI | DOCSEARCH-F01 | docsearch hotkey-launcher | Win32 低レベルフックによる Ctrl 連打検知と最前面小窓表示 | DOCSEARCH-01 |
+| デスクトップ検索GUI | DOCSEARCH-F02 | docsearch search-bar | 検索語入力・複数インデックス選択・キーボード操作 (Tab/Esc/Enter) | DOCSEARCH-02 |
+| デスクトップ検索GUI | DOCSEARCH-F03 | docsearch web-ui | ブラウザ上での Bleve IndexAlias 横断検索結果表示・条件修正 | DOCSEARCH-03 |
+| デスクトップ検索GUI | DOCSEARCH-F04 | docsearch open-doc | 検索結果からのファイル・フォルダ直接起動 | DOCSEARCH-04 |
+| デスクトップ検索GUI | DOCSEARCH-F05 | docsearch query-expansion | Google GenAI SDK による表記揺れ・同義語の展開とタグ選択 | DOCSEARCH-05 |
+| デスクトップ検索GUI | DOCSEARCH-F06 | docsearch query-history | 検索履歴の永続化保持およびインクリメンタルサジェスト補完 | DOCSEARCH-06 |
 
 ---
 
@@ -207,22 +218,51 @@
   - **概要**: HTML テキスト抽出、画像メタデータ・切り抜き・クリップボード保存、ZIP 圧縮・解凍。
   - **対応要件**: HTML-01, IMAGE-01〜03, UTIL-01
 
+### 機能カテゴリ: デスクトップ全文検索GUI (DOCSEARCH)
+- **DOCSEARCH-F01: docsearch hotkey-launcher**
+  - **概要**: Win32 低レベルフック (`WH_KEYBOARD_LL`) により、グローバルな Ctrl キーのダブルタップ (400ms以内) を検知して検索小窓をアクティブ表示する。
+  - **対応要件**: DOCSEARCH-01
+  - **設計のポイント**: バックグラウンド goroutine で Win32 メッセージループを回し、OS 全体のキー入力を低負荷で監視。非アクティブ時は CPU 消費 0%。
+- **DOCSEARCH-F02: docsearch search-bar**
+  - **概要**: デスクトップ中央に超軽量な枠なし小窓を表示し、検索語入力と複数インデックス選択チェックボックスを提供する。
+  - **対応要件**: DOCSEARCH-02
+  - **設計のポイント**: 純 Go + `golang.org/x/sys/windows` によるネイティブ `CreateWindowEx`。Esc で即座に非表示、Enter で小窓を閉じつつブラウザへクエリを渡す。Tab キーでインデックス選択の切り替えが可能。
+- **DOCSEARCH-F03: docsearch web-ui**
+  - **概要**: 内蔵 Web サーバー（Go `net/http`）により、ブラウザ上にリッチな検索結果画面を表示し、検索条件の修正やインデックス絞り込みを即時実行する。
+  - **対応要件**: DOCSEARCH-03
+  - **設計のポイント**: `pkg/fts` の Bleve インデックスを複数ロードし、`bleve.NewIndexAlias()` を用いて高速横断検索。各インデックス別のヒット件数バッジとスニペットハイライトを表示。
+- **DOCSEARCH-F04: docsearch open-doc**
+  - **概要**: 検索結果から対象ドキュメントまたは親フォルダを直接開く。
+  - **対応要件**: DOCSEARCH-04
+  - **設計のポイント**: ローカル Web サーバーの `/api/open` エンドポイント経由で `rundll32 url.dll,FileProtocolHandler` または `explorer.exe /select,path` を安全に実行。
+- **DOCSEARCH-F05: docsearch query-expansion**
+  - **概要**: Google GenAI SDK（Gemini Flash）を用いて検索クエリの同義語・関連語・表記揺れを生成し、検索結果画面にタグとして提示する。
+  - **対応要件**: DOCSEARCH-05
+  - **設計のポイント**: ユーザーがクリックしたタグを動的に OR 検索条件に加えて再検索を実行。
+- **DOCSEARCH-F06: docsearch query-history**
+  - **概要**: 実行された検索キーワードをローカルファイル（`history.json`）に永続化し、小窓および WebUI 入力時に入力文字列と前方一致・部分一致する候補をリアルタイムにサジェスト表示する。
+  - **対応要件**: DOCSEARCH-06
+  - **設計のポイント**: 検索実行時に `AddHistory(query)` で利用頻度 (`use_count`) と最終利用日時 (`last_used_at`) を更新。インクリメンタルサジェスト時は頻度順・日時順でソートした上位10件を返却。上下キー操作で入力補完可能。
+
 ---
 
 ## アーキテクチャ
 
 ### 設計方針
 1. **Agent-Native CLI 原則の徹底**: 非対話型・JSON構造化出力 (`stdout`/`stderr` 完全分離)・3-Layer Introspection (Layer 1: `--help`, Layer 2: `agent-context`, Layer 3: `SKILL.md`)。
-2. **シングルバイナリ化 (Single Binary)**: CGO 静的リンクによる MuPDF / Bleve / `go-ole` の内蔵。
-3. **ドメインの明確分離**: ドキュメント操作 / 全文検索 (`fts`) / 構造 RAG (`pageindex`) の分離。
+2. **Multi-Binary によるエージェント純度維持**: AI エージェント用 CLI (`doctools-cli.exe`) と人間向け検索 GUI (`docsearch-gui.exe`) を独立バイナリとして分離し、Introspection の混乱を防止。
+3. **シングルバイナリ化 (Single Binary)**: CGO 静的リンクによる MuPDF / Bleve / `go-ole`、および WebUI アセット（`embed`）の内蔵。
+4. **ドメインの明確分離**: ドキュメント操作 / 全文検索 (`fts`) / 構造 RAG (`pageindex`) / デスクトップGUI (`docsearch`) の分離。
+
 
 ### 全体構成図
 
 ```mermaid
 graph TD
-    Agent["AI Agent / LLM"] -->|CLI Flag & JSON| CLI["CLI Entrypoint: Cobra"]
+    Agent["AI Agent / LLM"] -->|CLI Flag & JSON| CLI["CLI Entrypoint: doctools-cli"]
+    Human["人間ユーザー"] -->|Ctrl連打 / Hotkey| GUI["GUI Entrypoint: docsearch-gui"]
     
-    subgraph SingleBinary["Single Binary (doctools-cli.exe)"]
+    subgraph SingleBinary["Single Binary 1: doctools-cli.exe"]
         CLI --> ExcelSvc["pkg/excel"]
         CLI --> PPTXSvc["pkg/pptx"]
         CLI --> PDFSvc["pkg/pdf"]
@@ -235,25 +275,43 @@ graph TD
         ExcelSvc --> Excelize["excelize Engine"]
         PDFSvc --> PDFCpu["pdfcpu Engine"]
         PDFSvc --> MuPDF["MuPDF CGO Static Lib"]
-        FTSSvc --> Bleve["Bleve Search Engine"]
         PISvc --> GenAI["google.golang.org/genai"]
         CSVSvc & TextSvc --> Chardet["saintfish/chardet"]
     end
+
+    subgraph SingleBinary2["Single Binary 2: docsearch-gui.exe"]
+        GUI --> Hook["pkg/docsearch (Win32 Hook)"]
+        GUI --> Window["pkg/docsearch (Native Window)"]
+        GUI --> WebServer["pkg/docsearch (Web Server)"]
+        GUI --> Expansion["pkg/docsearch (Query Expansion)"]
+        
+        Expansion --> GenAI
+        WebServer --> FTSSvcShared["pkg/fts (Bleve Index Reader)"]
+    end
+
+    FTSSvc --> Bleve["Bleve Search Engine"]
+    FTSSvcShared --> Bleve
     
     subgraph WindowsSystem["Windows System"]
         ExcelSvc -->|go-ole| ExcelApp["Excel.Application"]
         PPTXSvc -->|go-ole| PPTApp["PowerPoint.Application"]
         TextSvc & UtilSvc -->|go-ole| WinClip["Windows Clipboard"]
+        Hook -->|WH_KEYBOARD_LL| WinOS["Windows OS Keyboard Event"]
+        WebServer -->|Launch URL| Browser["Default Web Browser"]
+        WebServer -->|ShellExecute| WinDoc["Associated App / Explorer"]
     end
 ```
 
 ### レイヤー構造
-- **Presentation Layer (`pkg/cli`)**: フラグ入力解析、TTY 判定、3-Layer Introspection, JSON 構造化レスポンス成形。
-- **Service Layer (`pkg/excel`, `pkg/pdf`, `pkg/fts`, `pkg/pageindex` 等)**: 各ドメインのビジネスロジックおよびファイル処理。
-- **Infrastructure / Native Layer**: `go-ole` COM バインディング、MuPDF CGO 静的バインディング、`saintfish/chardet` エンコーディング判定、Bleve ストレージ。
+- **Presentation Layer**:
+  - `pkg/cli`: フラグ入力解析、TTY 判定、3-Layer Introspection, JSON 構造化レスポンス成形。
+  - `pkg/docsearch` (Window & Web): Win32 ネイティブ検索小窓、組み込み WebUI (HTML/CSS/JS)。
+- **Service Layer (`pkg/excel`, `pkg/pdf`, `pkg/fts`, `pkg/pageindex`, `pkg/docsearch` 等)**: 各ドメインのビジネスロジック、ファイル処理、マルチインデックス検索、クエリ拡張。
+- **Infrastructure / Native Layer**: `go-ole` COM バインディング、MuPDF CGO 静的バインディング、Win32 API (`golang.org/x/sys/windows`)、`saintfish/chardet` エンコーディング判定、Bleve ストレージ。
 
 ### 全体シーケンス図
 
+#### 1. AI エージェントによる CLI 実行 (doctools-cli)
 ```mermaid
 sequenceDiagram
     participant Agent as AI エージェント
@@ -271,6 +329,33 @@ sequenceDiagram
     Svc->>Svc: Convert PDF to PNG (MuPDF)
     Svc-->>CLI: Return Image Paths List
     CLI-->>Agent: stdout: {"status": "success", "data": {"output_paths": [...]}}
+```
+
+#### 2. 人間ユーザーによるデスクトップ全文検索 (docsearch-gui)
+```mermaid
+sequenceDiagram
+    participant User as 人間ユーザー
+    participant Hook as pkg/docsearch (KeyHook)
+    participant Win as pkg/docsearch (Native Window)
+    participant Srv as pkg/docsearch (Web Server)
+    participant FTS as pkg/fts (IndexAlias)
+    participant Browser as Web ブラウザ
+    
+    User->>Hook: Ctrl キーを連続 2 回押下 (400ms以内)
+    Hook->>Win: ShowWindow & SetForeground
+    Win-->>User: 画面中央に入力小窓を表示 (検索語 & インデックス選択)
+    User->>Win: キーワード入力 ＆ 対象インデックス選択 ＆ Enter
+    Win->>Win: HideWindow
+    Win->>Browser: ブラウザ起動 (http://localhost:PORT/?q=...&indexes=...)
+    Browser->>Srv: GET /api/search?q=...&indexes=...
+    Srv->>FTS: bleve.IndexAlias で横断検索
+    FTS-->>Srv: 検索結果 & インデックス別ヒット件数
+    Srv-->>Browser: JSON レスポンス返却 (結果描画)
+    User->>Browser: 検索条件の修正 / インデックス切り替え
+    Browser->>Srv: 再検索リクエスト (即時更新)
+    User->>Browser: 「ファイルを開く」クリック
+    Browser->>Srv: POST /api/open {"path": "..."}
+    Srv->>User: Windows 関連付けアプリでファイル起動
 ```
 
 ### データフロー図
@@ -449,6 +534,12 @@ graph LR
     FTSCmd --> FTSSvc["pkg/fts/fts.go"]
     PICmd --> PISvc["pkg/pageindex/retrieval.go"]
     CSVCmd --> CSVSvc["pkg/csv/csv.go"]
+
+    DocSearchCmd["cmd/docsearch-gui/main.go"] --> DocSearchHook["pkg/docsearch/hook.go"]
+    DocSearchCmd --> DocSearchWin["pkg/docsearch/window.go"]
+    DocSearchCmd --> DocSearchSrv["pkg/docsearch/server.go"]
+    DocSearchSrv --> DocSearchExp["pkg/docsearch/expansion.go"]
+    DocSearchSrv --> FTSSvc
 ```
 
 
@@ -472,6 +563,14 @@ graph LR
 | `pkg/html` | `ExtractText(path)` | HTMLパス | HTML要素パースと Markdown テキスト変換 | Markdown ファイルパス |
 | `pkg/image` | `CropImage(path, bounds)` | 画像パス, 矩形座標 | 画像のクロップ切り抜き保存 | 生成画像パス |
 | `pkg/util` | `ZipFiles(paths, outPath)` | ファイルパス一覧 | `archive/zip` による圧縮 | 生成 ZIP パス |
+| `pkg/docsearch` | `StartKeyboardHook(onTrigger)` | トリガーコールバック関数 | `WH_KEYBOARD_LL` で 400ms 以内の Ctrl 連打を監視 | エラー（失敗時） |
+| `pkg/docsearch` | `ShowSearchWindow(indexes, onSearch)` | インデックス一覧, 検索コールバック | Win32 `CreateWindowEx` で枠なし小窓を表示、Tab/クリック/Esc/Enter 制御 | なし |
+| `pkg/docsearch` | `StartServer(addr, indexes)` | バインドアドレス, インデックス一覧 | HTTP サーバーを起動し WebUI 配信・REST API (/api/search, /api/expand, /api/open) を提供 | サーバーインスタンス |
+| `pkg/docsearch` | `MultiIndexSearch(query, indexIDs)` | クエリ文字列, 対象インデックスID群 | 選択された Bleve インデックスを `IndexAlias` にバインドし横断検索 | 統合検索結果・インデックス別件数 |
+| `pkg/docsearch` | `ExpandQuery(query, model)` | 検索キーワード, LLMモデル名 | Gemini API により表記揺れ・同義語候補を生成 | 関連キーワード配列 |
+| `pkg/docsearch` | `OpenDocument(filePath)` | ファイル絶対パス | OS にファイル/フォルダのオープンを指示 | 実行結果エラー |
+| `pkg/docsearch` | `AddHistory(query)` | 検索キーワード | 検索履歴ファイル（`history.json`）の利用日時・回数を更新永続化 | エラー（失敗時） |
+| `pkg/docsearch` | `GetSuggestions(prefix, limit)` | 入力中文字列プレフィックス, 上限件数 | 履歴から部分一致・前方一致で候補を検索し頻度・日時順ソート | 候補文字列一覧 |
 
 ---
 
@@ -568,6 +667,102 @@ type ExcelPatchItem struct {
     "new_value": "無条件上書き文字列"
   }
 ]
+```
+
+### DocSearch 設定ファイルスキーマ (`docsearch.json`)
+
+`docsearch-gui` 起動時に読み込むインデックス設定および LLM 連携オプション：
+
+```json
+{
+  "server": {
+    "port": 18080,
+    "host": "127.0.0.1"
+  },
+  "hotkey": {
+    "enabled": true,
+    "interval_ms": 400
+  },
+  "indexes": [
+    {
+      "id": "rules",
+      "name": "社内規程",
+      "path": "C:/docs/indexes/rules.bleve",
+      "default_selected": true
+    },
+    {
+      "id": "project_a",
+      "name": "案件A",
+      "path": "C:/docs/indexes/project_a.bleve",
+      "default_selected": true
+    }
+  ],
+  "llm": {
+    "query_expansion": true,
+    "model": "gemini-2.5-flash"
+  }
+}
+```
+
+### DocSearch マルチインデックス検索 REST レスポンス (`GET /api/search`)
+
+```json
+{
+  "status": "success",
+  "query": "有給 申請",
+  "total_hits": 15,
+  "index_counts": {
+    "rules": 12,
+    "project_a": 3
+  },
+  "expanded_keywords": ["有給", "年次有給休暇", "年休", "休暇届"],
+  "results": [
+    {
+      "index_id": "rules",
+      "index_name": "社内規程",
+      "score": 0.892,
+      "file_name": "就業規則_2026.pdf",
+      "file_path": "C:/docs/rules/就業規則_2026.pdf",
+      "file_type": "pdf",
+      "page": 15,
+      "snippet": "第5条 本方針における<mark>有給</mark>休暇の<mark>申請</mark>手続きについて規定する...",
+      "updated_at": "2026-03-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### DocSearch 検索履歴スキーマ (`history.json`)
+
+```json
+{
+  "history": [
+    {
+      "query": "有給 申請",
+      "last_used_at": "2026-03-01T10:00:00Z",
+      "use_count": 8
+    },
+    {
+      "query": "就業規則",
+      "last_used_at": "2026-02-28T15:30:00Z",
+      "use_count": 3
+    }
+  ]
+}
+```
+
+### DocSearch インクリメンタルサジェスト REST レスポンス (`GET /api/history/suggest?prefix=...`)
+
+```json
+{
+  "status": "success",
+  "prefix": "有給",
+  "suggestions": [
+    "有給 申請",
+    "有給 残日数",
+    "有給 申請 期限"
+  ]
+}
 ```
 
 ---

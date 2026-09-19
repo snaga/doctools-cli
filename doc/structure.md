@@ -4,8 +4,10 @@
 
 ```text
 .
-├── cmd/                        # CLI エントリーポイント
-│   └── doctools-cli/           # メインバイナリソース (main.go のみ。ロジック記述禁止)
+├── cmd/                        # CLI / GUI エントリーポイント
+│   ├── doctools-cli/           # AIエージェント向け CLI バイナリ (main.go)
+│   │   └── main.go
+│   └── docsearch-gui/          # 人間向け デスクトップ全文検索GUIバイナリ (main.go)
 │       └── main.go
 ├── internal/                   # モジュール外部から import 不可のプライベートパッケージ
 │   └── version/                # バージョン情報 (ldflags -X で注入)
@@ -24,6 +26,13 @@
 │   │   ├── html.go
 │   │   ├── image.go
 │   │   └── util.go
+│   ├── docsearch/              # 人間向けデスクトップ検索GUIサービス
+│   │   ├── hook.go             # Win32 低レベルキーフック (Ctrl連打検知)
+│   │   ├── window.go           # Win32 ネイティブ小窓 (検索バー & インデックス選択)
+│   │   ├── server.go           # ローカル検索 Web サーバー & REST API
+│   │   ├── expansion.go        # Query Expansion サービス (LLM連携)
+│   │   ├── history.go          # 検索履歴の永続化・サジェストマッチング
+│   │   └── web/                # 埋め込み WebUI アセット (HTML/CSS/JS)
 │   ├── excel/                  # Excel 操作サービス (excelize + go-ole)
 │   ├── pptx/                   # PPTX 操作サービス (zip+xml + go-ole)
 │   ├── pdf/                    # PDF 操作サービス (pdfcpu + MuPDF fitz)
@@ -43,7 +52,8 @@
 │   └── design.md               # 詳細設計書
 ├── dist/                       # 配布パッケージ成果物 (.gitignore 対象)
 │   └── doctools-cli-{ver}-{os}-{arch}/
-│       └── doctools-cli.exe    # 静的バイナリ (-ldflags="-s -w")
+│       ├── doctools-cli.exe    # Agent-Native CLI バイナリ
+│       └── docsearch-gui.exe   # 人間向けデスクトップ検索GUIバイナリ
 ├── go.mod                      # Go モジュール定義
 ├── go.sum                      # Go 依存関係チェックサム
 ├── LICENSE                     # ライセンスファイル (Apache-2.0)
