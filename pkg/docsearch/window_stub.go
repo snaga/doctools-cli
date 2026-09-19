@@ -9,13 +9,14 @@ import (
 
 // SearchWindow represents an in-memory stub search window on non-Windows platforms.
 type SearchWindow struct {
-	mu       sync.RWMutex
-	indexes  []IndexConfig
-	onSearch SearchCallback
-	visible  bool
-	closed   bool
-	query    string
-	selected map[string]bool
+	mu         sync.RWMutex
+	indexes    []IndexConfig
+	onSearch   SearchCallback
+	visible    bool
+	closed     bool
+	hasWarning bool
+	query      string
+	selected   map[string]bool
 }
 
 // NewSearchWindow creates an in-memory stub SearchWindow on non-Windows platforms.
@@ -27,11 +28,27 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 		}
 	}
 
-	return &SearchWindow{
+	w := &SearchWindow{
 		indexes:  indexes,
 		onSearch: onSearch,
 		selected: sel,
-	}, nil
+	}
+	w.refreshIndexHealthLocked()
+	return w, nil
+}
+
+func (w *SearchWindow) refreshIndexHealthLocked() {
+	statuses := CheckIndexHealth(w.indexes)
+	validCount := 0
+	for _, s := range statuses {
+		if s.Exists {
+			validCount++
+		} else {
+			// Unselect missing index
+			delete(w.selected, s.Index.ID)
+		}
+	}
+	w.hasWarning = (validCount == 0)
 }
 
 func (w *SearchWindow) Show() error {
@@ -40,6 +57,7 @@ func (w *SearchWindow) Show() error {
 	if w.closed {
 		return fmt.Errorf("search window is closed")
 	}
+	w.refreshIndexHealthLocked()
 	w.visible = true
 	return nil
 }
@@ -55,6 +73,12 @@ func (w *SearchWindow) IsVisible() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.visible
+}
+
+func (w *SearchWindow) HasWarning() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.hasWarning
 }
 
 func (w *SearchWindow) isClosed() bool {
@@ -78,8 +102,12 @@ func (w *SearchWindow) SetQuery(q string) {
 func (w *SearchWindow) GetSelectedIndexes() []string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
+	statuses := CheckIndexHealth(w.indexes)
 	res := make([]string, 0, len(w.indexes))
-	for _, idx := range w.indexes {
+	for i, idx := range w.indexes {
+		if i < len(statuses) && !statuses[i].Exists {
+			continue
+		}
 		if w.selected[idx.ID] {
 			res = append(res, idx.ID)
 		}
@@ -94,6 +122,14 @@ func (w *SearchWindow) SetSelectedIndexes(ids []string) {
 	for _, id := range ids {
 		w.selected[id] = true
 	}
+	w.refreshIndexHealthLocked()
+}
+
+func (w *SearchWindow) SetIndexes(indexes []IndexConfig) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.indexes = indexes
+	w.refreshIndexHealthLocked()
 }
 
 func (w *SearchWindow) Close() error {

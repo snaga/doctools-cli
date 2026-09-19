@@ -12,10 +12,12 @@ type SearchWindowController interface {
 	Show() error
 	Hide() error
 	IsVisible() bool
+	HasWarning() bool
 	GetQuery() string
 	SetQuery(q string)
 	GetSelectedIndexes() []string
 	SetSelectedIndexes(ids []string)
+	SetIndexes(indexes []IndexConfig)
 	Close() error
 }
 
@@ -47,7 +49,7 @@ func ShowSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWi
 	defer windowMu.Unlock()
 
 	if activeWindow != nil && !activeWindow.isClosed() {
-		activeWindow.indexes = indexes
+		activeWindow.SetIndexes(indexes)
 		activeWindow.onSearch = onSearch
 		_ = activeWindow.Show()
 		return activeWindow, nil

@@ -32,10 +32,13 @@ var (
 	procSetWindowTextW        = user32.NewProc("SetWindowTextW")
 	procGetWindowTextLengthW  = user32.NewProc("GetWindowTextLengthW")
 	procGetSystemMetrics      = user32.NewProc("GetSystemMetrics")
+	procEnableWindow          = user32.NewProc("EnableWindow")
 	procPostMessageW          = user32.NewProc("PostMessageW")
 	procCreateSolidBrush      = gdi32.NewProc("CreateSolidBrush")
 	procGetStockObject        = gdi32.NewProc("GetStockObject")
 	procDeleteObject          = gdi32.NewProc("DeleteObject")
+	procSetTextColor          = gdi32.NewProc("SetTextColor")
+	procSetBkMode             = gdi32.NewProc("SetBkMode")
 )
 
 const (
@@ -50,6 +53,7 @@ const (
 
 	esAutoHScroll = 0x0080
 	esLeft        = 0x0000
+	ssLeft        = 0x0000
 
 	bsAutoCheckbox = 0x00000003
 	bmGetCheck     = 0x00F0
@@ -60,9 +64,13 @@ const (
 	swHide   = 0
 	swShow   = 5
 
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+
 	emSetSel = 0x00B1
 
-	wmSetFont = 0x0030
+	wmSetFont        = 0x0030
+	wmCtlColorStatic = 0x0138
 	wmClose   = 0x0010
 	wmDestroy = 0x0002
 
@@ -101,6 +109,12 @@ func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uin
 	switch msg {
 	case wmDestroy:
 		return 0
+	case wmCtlColorStatic:
+		// Amber/Red color for warning static label: RGB(204, 32, 0) -> 0x000020CC
+		procSetTextColor.Call(wParam, uintptr(0x000020CC))
+		procSetBkMode.Call(wParam, 1) // TRANSPARENT
+		bgBrush, _, _ := procGetStockObject.Call(uintptr(colorBtnFace))
+		return bgBrush
 	default:
 		ret, _, _ := procDefWindowProcW.Call(hWnd, uintptr(msg), wParam, lParam)
 		return ret
@@ -109,18 +123,20 @@ func globalWndProc(hWnd uintptr, msg uint32, wParam uintptr, lParam uintptr) uin
 
 // SearchWindow represents the native Win32 floating search window.
 type SearchWindow struct {
-	mu         sync.RWMutex
-	indexes    []IndexConfig
-	onSearch   SearchCallback
-	options    WindowOptions
-	visible    bool
-	closed     bool
+	mu          sync.RWMutex
+	indexes     []IndexConfig
+	onSearch    SearchCallback
+	options     WindowOptions
+	visible     bool
+	closed      bool
+	hasWarning  bool
 
-	hwnd       uintptr
-	editHWnd   uintptr
-	checkHWnds []uintptr
-	threadID   uint32
-	done       chan struct{}
+	hwnd        uintptr
+	editHWnd    uintptr
+	warningHWnd uintptr
+	checkHWnds  []uintptr
+	threadID    uint32
+	done        chan struct{}
 }
 
 // NewSearchWindow creates and initializes a Win32 native floating search window.
@@ -222,43 +238,30 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			procSendMessageW.Call(editHWnd, uintptr(wmSetFont), hFont, 1)
 		}
 
-		// Create Checkboxes for each index
-		btnClass := windows.StringToUTF16Ptr("BUTTON")
-		chkX := 16
-		chkY := 56
-		chkHeight := 24
-		for _, idx := range w.indexes {
-			namePtr := windows.StringToUTF16Ptr(idx.Name)
-			chkWidth := len([]rune(idx.Name))*16 + 32
-			if chkWidth < 80 {
-				chkWidth = 80
-			}
-
-			chkHWnd, _, _ := procCreateWindowExW.Call(
-				0,
-				uintptr(unsafe.Pointer(btnClass)),
-				uintptr(unsafe.Pointer(namePtr)),
-				uintptr(wsChild|wsVisible|wsTabStop|bsAutoCheckbox),
-				uintptr(chkX),
-				uintptr(chkY),
-				uintptr(chkWidth),
-				uintptr(chkHeight),
-				hwnd,
-				0,
-				hInst,
-				0,
-			)
-			if chkHWnd != 0 {
-				if hFont != 0 {
-					procSendMessageW.Call(chkHWnd, uintptr(wmSetFont), hFont, 1)
-				}
-				if idx.DefaultSelected {
-					procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(bstChecked), 0)
-				}
-				w.checkHWnds = append(w.checkHWnds, chkHWnd)
-				chkX += chkWidth + 8
-			}
+		// Create Warning Static Label (shown when no valid indexes exist)
+		staticClass := windows.StringToUTF16Ptr("STATIC")
+		warningText := windows.StringToUTF16Ptr(MissingIndexWarningText)
+		warningHWnd, _, _ := procCreateWindowExW.Call(
+			0,
+			uintptr(unsafe.Pointer(staticClass)),
+			uintptr(unsafe.Pointer(warningText)),
+			uintptr(wsChild|ssLeft),
+			uintptr(16),
+			uintptr(56),
+			uintptr(opts.Width-32),
+			uintptr(24),
+			hwnd,
+			0,
+			hInst,
+			0,
+		)
+		w.warningHWnd = warningHWnd
+		if warningHWnd != 0 && hFont != 0 {
+			procSendMessageW.Call(warningHWnd, uintptr(wmSetFont), hFont, 1)
 		}
+
+		// Initialize checkboxes and health check status
+		w.refreshIndexHealthLocked()
 
 		readyCh <- nil
 
@@ -357,6 +360,108 @@ func (w *SearchWindow) focusNextControl() {
 	}
 }
 
+// refreshIndexHealthLocked checks index health, updates warning and checkbox states.
+// Must be called with w.mu held.
+func (w *SearchWindow) refreshIndexHealthLocked() {
+	statuses := CheckIndexHealth(w.indexes)
+	validCount := 0
+	for _, s := range statuses {
+		if s.Exists {
+			validCount++
+		}
+	}
+
+	w.hasWarning = (validCount == 0)
+
+	hInst, _, _ := procGetModuleHandleW.Call(0)
+	hFont, _, _ := procGetStockObject.Call(uintptr(defaultGuiFont))
+	btnClass := windows.StringToUTF16Ptr("BUTTON")
+
+	if validCount == 0 {
+		// Show warning label
+		if w.warningHWnd != 0 {
+			procShowWindow.Call(w.warningHWnd, uintptr(swShow))
+		}
+		// Hide checkboxes
+		for _, chkHWnd := range w.checkHWnds {
+			procShowWindow.Call(chkHWnd, uintptr(swHide))
+		}
+		return
+	}
+
+	// Hide warning label when valid indexes exist
+	if w.warningHWnd != 0 {
+		procShowWindow.Call(w.warningHWnd, uintptr(swHide))
+	}
+
+	chkX := 16
+	chkY := 56
+	chkHeight := 24
+
+	// Dynamically create checkbox handles if more indexes were provided
+	for len(w.checkHWnds) < len(w.indexes) {
+		idxIdx := len(w.checkHWnds)
+		newChk, _, _ := procCreateWindowExW.Call(
+			0,
+			uintptr(unsafe.Pointer(btnClass)),
+			0,
+			uintptr(wsChild|wsTabStop|bsAutoCheckbox),
+			uintptr(chkX),
+			uintptr(chkY),
+			uintptr(80),
+			uintptr(chkHeight),
+			w.hwnd,
+			0,
+			hInst,
+			0,
+		)
+		if newChk != 0 {
+			if hFont != 0 {
+				procSendMessageW.Call(newChk, uintptr(wmSetFont), hFont, 1)
+			}
+			if idxIdx < len(w.indexes) && w.indexes[idxIdx].DefaultSelected {
+				procSendMessageW.Call(newChk, uintptr(bmSetCheck), uintptr(bstChecked), 0)
+			}
+		}
+		w.checkHWnds = append(w.checkHWnds, newChk)
+	}
+
+	// Update each checkbox
+	for i, s := range statuses {
+		chkHWnd := w.checkHWnds[i]
+		if s.Exists {
+			namePtr := windows.StringToUTF16Ptr(s.Index.Name)
+			procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(namePtr)))
+			procEnableWindow.Call(chkHWnd, 1)
+			chkWidth := len([]rune(s.Index.Name))*16 + 32
+			if chkWidth < 80 {
+				chkWidth = 80
+			}
+			procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
+			procShowWindow.Call(chkHWnd, uintptr(swShow))
+			chkX += chkWidth + 8
+		} else {
+			label := FormatMissingIndexLabel(s.Index.Name)
+			labelPtr := windows.StringToUTF16Ptr(label)
+			procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(labelPtr)))
+			procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(bstUnchecked), 0)
+			procEnableWindow.Call(chkHWnd, 0)
+			chkWidth := len([]rune(label))*14 + 32
+			if chkWidth < 120 {
+				chkWidth = 120
+			}
+			procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
+			procShowWindow.Call(chkHWnd, uintptr(swShow))
+			chkX += chkWidth + 8
+		}
+	}
+
+	// Hide any extra checkboxes
+	for j := len(w.indexes); j < len(w.checkHWnds); j++ {
+		procShowWindow.Call(w.checkHWnds[j], uintptr(swHide))
+	}
+}
+
 // Show makes the search window visible, brings it to foreground, and focuses the edit box.
 func (w *SearchWindow) Show() error {
 	w.mu.Lock()
@@ -365,6 +470,8 @@ func (w *SearchWindow) Show() error {
 	if w.closed {
 		return fmt.Errorf("search window is closed")
 	}
+
+	w.refreshIndexHealthLocked()
 
 	procShowWindow.Call(w.hwnd, uintptr(swShow))
 	procSetForegroundWindow.Call(w.hwnd)
@@ -395,6 +502,13 @@ func (w *SearchWindow) IsVisible() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.visible
+}
+
+// HasWarning returns true if there are no valid indexes available.
+func (w *SearchWindow) HasWarning() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.hasWarning
 }
 
 // isClosed returns true if the search window is destroyed.
@@ -438,14 +552,19 @@ func (w *SearchWindow) SetQuery(q string) {
 	procSendMessageW.Call(w.editHWnd, uintptr(emSetSel), 0, ^uintptr(0))
 }
 
-// GetSelectedIndexes returns the list of index IDs whose checkboxes are currently checked.
+// GetSelectedIndexes returns the list of index IDs whose checkboxes are currently checked and healthy.
 func (w *SearchWindow) GetSelectedIndexes() []string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
+	statuses := CheckIndexHealth(w.indexes)
+
 	selected := make([]string, 0, len(w.indexes))
 	for i, chkHWnd := range w.checkHWnds {
 		if i < len(w.indexes) {
+			if !statuses[i].Exists {
+				continue
+			}
 			ret, _, _ := procSendMessageW.Call(chkHWnd, uintptr(bmGetCheck), 0, 0)
 			if ret == uintptr(bstChecked) {
 				selected = append(selected, w.indexes[i].ID)
@@ -465,15 +584,25 @@ func (w *SearchWindow) SetSelectedIndexes(ids []string) {
 		idMap[id] = true
 	}
 
+	statuses := CheckIndexHealth(w.indexes)
+
 	for i, chkHWnd := range w.checkHWnds {
 		if i < len(w.indexes) {
 			checkVal := bstUnchecked
-			if idMap[w.indexes[i].ID] {
+			if statuses[i].Exists && idMap[w.indexes[i].ID] {
 				checkVal = bstChecked
 			}
 			procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(checkVal), 0)
 		}
 	}
+}
+
+// SetIndexes updates the configured search indexes and refreshes health status.
+func (w *SearchWindow) SetIndexes(indexes []IndexConfig) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.indexes = indexes
+	w.refreshIndexHealthLocked()
 }
 
 // Close destroys the Win32 window and terminates its message loop.
