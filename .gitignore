@@ -18,6 +18,8 @@ token.json
 .env
 .env.*
 !.env.sample
+docsearch.json
+!docsearch.sample.json
 
 # ================================
 # 🏗️ Go ビルド成果物

@@ -68,8 +68,8 @@ const (
 	bstUnchecked   = 0x0000
 	bstChecked     = 0x0001
 
-	swHide   = 0
-	swShow   = 5
+	swHide = 0
+	swShow = 5
 
 	swpNoZOrder   = 0x0004
 	swpNoActivate = 0x0010
@@ -87,10 +87,10 @@ const (
 	dwmwaWindowCornerPreference = 33
 	dwmwcpRound                 = 2
 
-	colorBtnFace      = 15
-	defaultGuiFont    = 17
-	smCxScreen        = 0
-	smCyScreen        = 1
+	colorBtnFace   = 15
+	defaultGuiFont = 17
+	smCxScreen     = 0
+	smCyScreen     = 1
 
 	vkTab    = 0x09
 	vkReturn = 0x0D
@@ -286,41 +286,49 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			}
 		}
 
-		// Create modern typography font: Segoe UI (height -16 ~ 14pt)
+		// Create modern typography font: Segoe UI or Meiryo UI (height -16 ~ 14pt)
 		fontName := windows.StringToUTF16Ptr("Segoe UI")
 		fontHeight := int32(-16)
 		hFont, _, _ := procCreateFontW.Call(
 			uintptr(fontHeight), // Height (-16 gives ~14pt crisp font)
-			0,            // Width
-			0,            // Escapement
-			0,            // Orientation
-			400,          // Weight (FW_NORMAL)
-			0,            // Italic
-			0,            // Underline
-			0,            // StrikeOut
-			1,            // DEFAULT_CHARSET
-			0,            // OUT_DEFAULT_PRECIS
-			0,            // CLIP_DEFAULT_PRECIS
-			5,            // CLEARTYPE_QUALITY
-			0,            // PitchAndFamily
+			0,                   // Width
+			0,                   // Escapement
+			0,                   // Orientation
+			400,                 // Weight (FW_NORMAL)
+			0,                   // Italic
+			0,                   // Underline
+			0,                   // StrikeOut
+			1,                   // DEFAULT_CHARSET
+			0,                   // OUT_DEFAULT_PRECIS
+			0,                   // CLIP_DEFAULT_PRECIS
+			5,                   // CLEARTYPE_QUALITY
+			0,                   // PitchAndFamily
 			uintptr(unsafe.Pointer(fontName)),
 		)
+		if hFont == 0 {
+			fontName = windows.StringToUTF16Ptr("Meiryo UI")
+			hFont, _, _ = procCreateFontW.Call(
+				uintptr(fontHeight),
+				0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0,
+				uintptr(unsafe.Pointer(fontName)),
+			)
+		}
 		if hFont == 0 {
 			hFont, _, _ = procGetStockObject.Call(uintptr(defaultGuiFont))
 		}
 		w.customFont = hFont
 
-		// Create Edit Control (Search Bar)
+		// Create Edit Control (Search Bar) - flat modern border without 3D client edge
 		editClass := windows.StringToUTF16Ptr("EDIT")
 		editHWnd, _, err := procCreateWindowExW.Call(
-			uintptr(wsExClientEdge),
+			0,
 			uintptr(unsafe.Pointer(editClass)),
 			0,
-			uintptr(wsChild|wsVisible|wsTabStop|esLeft|esAutoHScroll),
+			uintptr(wsChild|wsVisible|wsTabStop|esLeft|esAutoHScroll|wsBorder),
 			uintptr(16),
-			uintptr(16),
+			uintptr(14),
 			uintptr(opts.Width-32),
-			uintptr(32),
+			uintptr(36),
 			hwnd,
 			0,
 			hInst,
@@ -352,9 +360,9 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			uintptr(unsafe.Pointer(warningText)),
 			uintptr(wsChild|ssLeft),
 			uintptr(16),
-			uintptr(56),
-			uintptr(opts.Width-32-78),
-			uintptr(24),
+			uintptr(64),
+			uintptr(opts.Width-32-88),
+			uintptr(26),
 			hwnd,
 			0,
 			hInst,
@@ -365,19 +373,21 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 			procSendMessageW.Call(warningHWnd, uintptr(wmSetFont), hFont, 1)
 		}
 
-		// Create [＋ 追加] Button
+		// Create ＋ 追加 Button (Modern style, 80x26 at right)
 		btnClass := windows.StringToUTF16Ptr("BUTTON")
-		addBtnText := windows.StringToUTF16Ptr("[＋ 追加]")
-		addBtnX := opts.Width - 16 - 74
+		addBtnText := windows.StringToUTF16Ptr("＋ 追加")
+		addBtnWidth := 80
+		addBtnHeight := 26
+		addBtnX := opts.Width - 16 - addBtnWidth
 		addBtnHWnd, _, _ := procCreateWindowExW.Call(
 			0,
 			uintptr(unsafe.Pointer(btnClass)),
 			uintptr(unsafe.Pointer(addBtnText)),
 			uintptr(wsChild|wsVisible|wsTabStop|bsPushButton),
 			uintptr(addBtnX),
-			uintptr(56),
-			uintptr(74),
-			uintptr(24),
+			uintptr(64),
+			uintptr(addBtnWidth),
+			uintptr(addBtnHeight),
 			hwnd,
 			0,
 			hInst,
@@ -397,9 +407,9 @@ func NewSearchWindow(indexes []IndexConfig, onSearch SearchCallback) (*SearchWin
 				0,
 				uintptr(wsChild|wsTabStop|bsAutoCheckbox),
 				uintptr(16),
-				uintptr(56),
+				uintptr(64),
 				uintptr(80),
-				uintptr(24),
+				uintptr(26),
 				hwnd,
 				0,
 				hInst,
@@ -554,40 +564,38 @@ func (w *SearchWindow) refreshIndexHealthLocked() {
 		procShowWindow.Call(w.warningHWnd, uintptr(swHide))
 	}
 
-	chkX := 16
-	chkY := 56
-	chkHeight := 24
+	layouts := ComputeCheckboxLayouts(w.options.Width, w.indexes, statuses)
 
 	// Update each checkbox from pre-created pool
 	for i := 0; i < len(w.checkHWnds); i++ {
 		chkHWnd := w.checkHWnds[i]
-		if i < len(w.indexes) {
-			s := statuses[i]
-			if s.Exists {
-				namePtr := windows.StringToUTF16Ptr(s.Index.Name)
-				procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(namePtr)))
+		if i < len(layouts) {
+			layout := layouts[i]
+			if !layout.Visible {
+				procShowWindow.Call(chkHWnd, uintptr(swHide))
+				continue
+			}
+
+			labelPtr := windows.StringToUTF16Ptr(layout.Label)
+			procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(labelPtr)))
+
+			if layout.Enabled {
 				procEnableWindow.Call(chkHWnd, 1)
-				chkWidth := len([]rune(s.Index.Name))*16 + 32
-				if chkWidth < 80 {
-					chkWidth = 80
-				}
-				procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
-				procShowWindow.Call(chkHWnd, uintptr(swShow))
-				chkX += chkWidth + 8
 			} else {
-				label := FormatMissingIndexLabel(s.Index.Name)
-				labelPtr := windows.StringToUTF16Ptr(label)
-				procSetWindowTextW.Call(chkHWnd, uintptr(unsafe.Pointer(labelPtr)))
 				procSendMessageW.Call(chkHWnd, uintptr(bmSetCheck), uintptr(bstUnchecked), 0)
 				procEnableWindow.Call(chkHWnd, 0)
-				chkWidth := len([]rune(label))*14 + 32
-				if chkWidth < 120 {
-					chkWidth = 120
-				}
-				procSetWindowPos.Call(chkHWnd, 0, uintptr(chkX), uintptr(chkY), uintptr(chkWidth), uintptr(chkHeight), uintptr(swpNoZOrder|swpNoActivate))
-				procShowWindow.Call(chkHWnd, uintptr(swShow))
-				chkX += chkWidth + 8
 			}
+
+			procSetWindowPos.Call(
+				chkHWnd,
+				0,
+				uintptr(layout.X),
+				uintptr(layout.Y),
+				uintptr(layout.Width),
+				uintptr(layout.Height),
+				uintptr(swpNoZOrder|swpNoActivate),
+			)
+			procShowWindow.Call(chkHWnd, uintptr(swShow))
 		} else {
 			// Hide unused checkboxes in pool
 			procShowWindow.Call(chkHWnd, uintptr(swHide))
@@ -842,6 +850,10 @@ func (w *SearchWindow) TriggerAddIndex() (string, bool, error) {
 func (w *SearchWindow) Close() error {
 	w.mu.Lock()
 	if w.closed {
+		if w.customFont != 0 {
+			procDeleteObject.Call(w.customFont)
+			w.customFont = 0
+		}
 		w.mu.Unlock()
 		return nil
 	}
@@ -870,10 +882,12 @@ func (w *SearchWindow) Close() error {
 		}
 	}
 
+	w.mu.Lock()
 	if w.customFont != 0 {
 		procDeleteObject.Call(w.customFont)
 		w.customFont = 0
 	}
+	w.mu.Unlock()
 
 	return nil
 }

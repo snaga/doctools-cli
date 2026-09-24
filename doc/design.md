@@ -72,13 +72,16 @@
 | 画像操作 | IMAGE-F02 | image crop | 画像の指定領域切り抜き (Crop) | IMAGE-02 |
 | 画像操作 | IMAGE-F03 | image save-clipboard | クリップボード画像の PNG 保存 (Windows) | IMAGE-03 |
 | 共通ユーティリティ | UTIL-F01 | util zip / util unzip | 複数ファイルの ZIP 圧縮、および解凍 | UTIL-01 |
-| デスクトップ検索GUI | DOCSEARCH-F01 | docsearch hotkey-launcher | Win32 低レベルフックによる Ctrl 連打検知と最前面小窓表示 | DOCSEARCH-01 |
-| デスクトップ検索GUI | DOCSEARCH-F02 | docsearch search-bar | 検索語入力・複数インデックス選択・キーボード操作 (Tab/Esc/Enter) | DOCSEARCH-02 |
-| デスクトップ検索GUI | DOCSEARCH-F03 | docsearch web-ui | ブラウザ上での Bleve IndexAlias 横断検索結果表示・条件修正 | DOCSEARCH-03 |
+| デスクトップ検索GUI | DOCSEARCH-F01 | docsearch hotkey-launcher | Win32 低レベルフックによる Ctrl 連打検知と同一タブ検索画面直接起動 | DOCSEARCH-01 |
+| デスクトップ検索GUI | DOCSEARCH-F02 | docsearch tray-resident | タスクトレイ（通知領域）常駐およびコンテキストメニュー提供 | DOCSEARCH-02 |
+| デスクトップ検索GUI | DOCSEARCH-F03 | docsearch web-ui | ブラウザ上での Bleve IndexAlias 横断検索結果表示・日本語自動フレーズ処理 | DOCSEARCH-03 |
 | デスクトップ検索GUI | DOCSEARCH-F04 | docsearch open-doc | 検索結果からのファイル・フォルダ直接起動 | DOCSEARCH-04 |
 | デスクトップ検索GUI | DOCSEARCH-F05 | docsearch query-expansion | Google GenAI SDK による表記揺れ・同義語の展開とタグ選択 | DOCSEARCH-05 |
 | デスクトップ検索GUI | DOCSEARCH-F06 | docsearch query-history | 検索履歴の永続化保持およびインクリメンタルサジェスト補完 | DOCSEARCH-06 |
-| デスクトップ検索GUI | DOCSEARCH-F07 | docsearch index-management | 起動時インデックス実在ヘルスチェックおよびダイアログによる動的インデックス追加 | DOCSEARCH-07 |
+| デスクトップ検索GUI | DOCSEARCH-F07 | docsearch index-management | 起動時インデックス実在ヘルスチェックおよび動的インデックス管理 | DOCSEARCH-07 |
+| デスクトップ検索GUI | DOCSEARCH-F08 | docsearch same-tab-controller | SSE & ウィンドウ最前面化連携によるブラウザ同一タブ制御（タブ乱立防止） | DOCSEARCH-08 |
+| デスクトップ検索GUI | DOCSEARCH-F09 | docsearch background-spawn | コマンドラインからのバックグラウンド自己デタッチ起動 & Job Object Breakaway | DOCSEARCH-09 |
+
 
 ---
 
@@ -221,17 +224,17 @@
 
 ### 機能カテゴリ: デスクトップ全文検索GUI (DOCSEARCH)
 - **DOCSEARCH-F01: docsearch hotkey-launcher**
-  - **概要**: Win32 低レベルフック (`WH_KEYBOARD_LL`) により、グローバルな Ctrl キーのダブルタップ (400ms以内) を検知して検索小窓をアクティブ表示する。
-  - **対応要件**: DOCSEARCH-01
-  - **設計のポイント**: バックグラウンド goroutine で Win32 メッセージループを回し、OS 全体のキー入力を低負荷で監視。非アクティブ時は CPU 消費 0%。
-- **DOCSEARCH-F02: docsearch search-bar**
-  - **概要**: デスクトップ中央に Web 風モダンUI（`Segoe UI` / `Meiryo UI` フォント、プレースホルダー、角丸、ダーク/ライト視認性配色）の枠なし小窓を表示し、検索語入力と複数インデックス選択タグ/チェックボックスを提供する。
+  - **概要**: Win32 低レベルフック (`WH_KEYBOARD_LL`) により、グローバルな Ctrl キーのダブルタップ (400ms以内) を検知して、デフォルトブラウザで同一タブをターゲットとして検索画面を直接起動する。
+  - **対応要件**: DOCSEARCH-01, DOCSEARCH-08
+  - **設計のポイント**: バックグラウンド goroutine で Win32 メッセージループを回し、OS 全体のキー入力を低負荷で監視。小窓を介さず直接ブラウザを同一タブ（`docsearch_main_tab`）で開く。
+- **DOCSEARCH-F02: docsearch tray-resident**
+  - **概要**: タスクトレイ（通知領域）にアイコンを表示してバックグラウンド常駐し、右クリックメニュー（検索画面を開く、設定、終了）を提供する。
   - **対応要件**: DOCSEARCH-02
-  - **設計のポイント**: 純 Go + `golang.org/x/sys/windows` によるネイティブ `CreateWindowEx`。Windows 11 DWM 角丸 (`DWMWA_WINDOW_CORNER_PREFERENCE`) / リージョン角丸、`WM_SETFONT`、プレースホルダー (`EM_SETCUEBANNER`) を適用。Esc で即座に非表示、Enter で小窓を閉じつつブラウザへクエリを渡す。Tab キーでインデックス選択の切り替えが可能。
-- **DOCSEARCH-F03: docsearch web-ui**
-  - **概要**: 内蔵 Web サーバー（Go `net/http`）により、ブラウザ上にリッチな検索結果画面を表示し、検索条件の修正やインデックス絞り込みを即時実行する。
+  - **設計のポイント**: 純 Go + `golang.org/x/sys/windows` による `Shell_NotifyIconW`（`NIM_ADD`, `NIM_DELETE`）および `CreatePopupMenu` / `TrackPopupMenu`。常駐中のプロセスを安全に制御し、タスクバーを占有しない。
+- **DOCSEARCH-F03: docsearch web-ui & auto-phrase-query**
+  - **概要**: 内蔵 Web サーバー（Go `net/http`）により、ブラウザ上にリッチな検索画面を提供し、日本語検索クエリの自動フレーズ化（`"..."` でクォート）と Bleve IndexAlias による横断検索を行う。
   - **対応要件**: DOCSEARCH-03
-  - **設計のポイント**: `pkg/fts` の Bleve インデックスを複数ロードし、`bleve.NewIndexAlias()` を用いて高速横断検索。各インデックス別のヒット件数バッジとスニペットハイライトを表示。
+  - **設計のポイント**: ユーザーが「テスト戦略」と入力した場合、文字種境界で勝手に OR 分割されないよう内部的に `"テスト戦略"` に変換して完全一致検索を実行。各インデックス別のヒット件数バッジとスニペットハイライトを表示。
 - **DOCSEARCH-F04: docsearch open-doc**
   - **概要**: 検索結果から対象ドキュメントまたは親フォルダを直接開く。
   - **対応要件**: DOCSEARCH-04
@@ -241,13 +244,21 @@
   - **対応要件**: DOCSEARCH-05
   - **設計のポイント**: ユーザーがクリックしたタグを動的に OR 検索条件に加えて再検索を実行。
 - **DOCSEARCH-F06: docsearch query-history**
-  - **概要**: 実行された検索キーワードをローカルファイル（`history.json`）に永続化し、小窓および WebUI 入力時に入力文字列と前方一致・部分一致する候補をリアルタイムにサジェスト表示する。
+  - **概要**: 実行された検索キーワードをローカルファイル（`history.json`）に永続化し、WebUI 入力時に入力文字列と前方一致・部分一致する候補をリアルタイムにサジェスト表示する。
   - **対応要件**: DOCSEARCH-06
   - **設計のポイント**: 検索実行時に `AddHistory(query)` で利用頻度 (`use_count`) と最終利用日時 (`last_used_at`) を更新。インクリメンタルサジェスト時は頻度順・日時順でソートした上位10件を返却。上下キー操作で入力補完可能。
 - **DOCSEARCH-F07: docsearch index-management**
-  - **概要**: 登録済みインデックスファイルの起動時/表示時実在性ヘルスチェック、およびファイル/フォルダ選択ダイアログによる `.bleve` インデックスの動的追加・永続化を行う。
+  - **概要**: インデックスの追加・削除・選択状態管理および実在性ヘルスチェックを設定画面（WebUI `/settings` またはモーダル）で行う。
   - **対応要件**: DOCSEARCH-07
-  - **設計のポイント**: 登録済みインデックスのパスを `os.Stat` で走査し、存在しないものはタグ上で `⚠️ (見つかりません)` と表示して選択不可化。有効インデックスが 0 件のときはフィードバック警告メッセージを表示。小窓上の `[＋ 追加]` ボタンから `GetOpenFileNameW` / `IFileDialog` を起動し、選択された `.bleve` パスを `docsearch.json` に追加保存（`SaveConfig`）して即時反映。
+  - **設計のポイント**: 登録済みインデックスのパスを `os.Stat` で走査し、存在しないものは警告（選択不可）表示。フォルダ選択ダイアログまたはWeb画面からのパス入力で `.bleve` インデックスを追加・削除し、`docsearch.json` に即時反映。
+- **DOCSEARCH-F08: docsearch same-tab-controller**
+  - **概要**: ブラウザ起動時に新規タブが無限に増えるのを防ぎ、同一タブ（名前付きウィンドウ/タブ）を再利用して検索画面を開く。
+  - **対応要件**: DOCSEARCH-08
+  - **設計のポイント**: `/launch` エンドポイントでターゲット名（`docsearch_main_tab`）を指定した `window.open` を実行し、既存タブがあればフォーカス・リロードして自身を閉じる。または既存タブ接続時のアクティブ化。
+- **DOCSEARCH-F09: docsearch background-spawn**
+  - **概要**: コマンドラインから起動された際、デフォルトで自身をバックグラウンド（デタッチ）プロセスとして起動し、コマンドラインプロンプトを即座に解放する。
+  - **対応要件**: DOCSEARCH-09
+  - **設計のポイント**: `--foreground` (`-f`) フラグ未指定時に `os.Executable()` で自身の子プロセスを `windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS` フラグ付きで起動し、親プロセスは即座に終了（`os.Exit(0)`）。デバッグ時のみ `--foreground` を指定してコンソール出力を維持。
 
 ---
 
@@ -340,24 +351,44 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User as 人間ユーザー
+    participant Parent as docsearch-gui (親プロセス)
+    participant Child as docsearch-gui (常駐子プロセス)
     participant Hook as pkg/docsearch (KeyHook)
-    participant Win as pkg/docsearch (Native Window)
-    participant Srv as pkg/docsearch (Web Server)
+    participant Tray as pkg/docsearch (Tray Icon)
+    participant Srv as pkg/docsearch (Server / SSE)
     participant FTS as pkg/fts (IndexAlias)
-    participant Browser as Web ブラウザ
+    participant Browser as Web ブラウザ (同一タブ)
     
-    User->>Hook: Ctrl キーを連続 2 回押下 (400ms以内)
-    Hook->>Win: ShowWindow & SetForeground
-    Win-->>User: 画面中央に入力小窓を表示 (検索語 & インデックス選択)
-    User->>Win: キーワード入力 ＆ 対象インデックス選択 ＆ Enter
-    Win->>Win: HideWindow
-    Win->>Browser: ブラウザ起動 (http://localhost:PORT/?q=...&indexes=...)
-    Browser->>Srv: GET /api/search?q=...&indexes=...
-    Srv->>FTS: bleve.IndexAlias で横断検索
+    User->>Parent: コマンドライン実行 (docsearch-gui.exe)
+    Parent->>Child: デタッチ子プロセス起動 (DETACHED_PROCESS | BREAKAWAY)
+    Parent-->>User: "DocSearch started in background." 即座にプロンプト解放 (約20ms)
+    
+    Note over Child,Tray: バックグラウンド常駐・タスクトレイ登録
+    Browser->>Srv: 初回アクセス時に GET /api/events (SSE常時接続)
+    
+    alt ホットキー押下時
+        User->>Hook: Ctrl キーを連続 2 回押下 (400ms以内)
+        Hook->>Srv: OpenSearch() 呼び出し
+    else トレイ右クリック時
+        User->>Tray: 右クリックメニューから「検索画面を開く」選択
+        Tray->>Srv: OpenSearch() 呼び出し
+    end
+
+    alt すでにブラウザタブが開いている場合 (HasActiveWebClients == true)
+        Srv->>Browser: SSE通知 data: {"action": "focus"}
+        Srv->>Browser: Win32 SetForegroundWindow でウィンドウ最前面化
+        Note over Browser: 新規タブは開かず既存タブがフォーカスされる！
+    else 初回起動時
+        Srv->>Browser: OS経由で URL 起動 (http://localhost:PORT/launch)
+        Browser->>Browser: window.open("/", "docsearch_main_tab")
+    end
+
+    User->>Browser: 検索語入力（例: テスト戦略）
+    Browser->>Srv: GET /api/search?q=テスト戦略
+    Srv->>Srv: 日本語自動フレーズ化 ("テスト戦略")
+    Srv->>FTS: bleve.IndexAlias で横断フレーズ検索
     FTS-->>Srv: 検索結果 & インデックス別ヒット件数
     Srv-->>Browser: JSON レスポンス返却 (結果描画)
-    User->>Browser: 検索条件の修正 / インデックス切り替え
-    Browser->>Srv: 再検索リクエスト (即時更新)
     User->>Browser: 「ファイルを開く」クリック
     Browser->>Srv: POST /api/open {"path": "..."}
     Srv->>User: Windows 関連付けアプリでファイル起動
@@ -541,8 +572,11 @@ graph LR
     CSVCmd --> CSVSvc["pkg/csv/csv.go"]
 
     DocSearchCmd["cmd/docsearch-gui/main.go"] --> DocSearchHook["pkg/docsearch/hook.go"]
+    DocSearchCmd --> DocSearchTray["pkg/docsearch/tray.go"]
+    DocSearchCmd --> DocSearchFocus["pkg/docsearch/focus.go"]
     DocSearchCmd --> DocSearchWin["pkg/docsearch/window.go"]
     DocSearchCmd --> DocSearchSrv["pkg/docsearch/server.go"]
+    DocSearchSrv --> DocSearchQuery["pkg/docsearch/query.go"]
     DocSearchSrv --> DocSearchExp["pkg/docsearch/expansion.go"]
     DocSearchSrv --> FTSSvc
 ```
@@ -568,16 +602,20 @@ graph LR
 | `pkg/html` | `ExtractText(path)` | HTMLパス | HTML要素パースと Markdown テキスト変換 | Markdown ファイルパス |
 | `pkg/image` | `CropImage(path, bounds)` | 画像パス, 矩形座標 | 画像のクロップ切り抜き保存 | 生成画像パス |
 | `pkg/util` | `ZipFiles(paths, outPath)` | ファイルパス一覧 | `archive/zip` による圧縮 | 生成 ZIP パス |
+| `cmd/docsearch-gui` | `spawnBackgroundProcess(args)` | コマンドライン引数 | 自身を `windows.CREATE_NEW_PROCESS_GROUP \| windows.DETACHED_PROCESS \| flagBreakawayFromJob` でバックグラウンド起動し親は即時Exit | エラー（失敗時） |
 | `pkg/docsearch` | `StartKeyboardHook(onTrigger)` | トリガーコールバック関数 | `WH_KEYBOARD_LL` で 400ms 以内の Ctrl 連打を監視 | エラー（失敗時） |
-| `pkg/docsearch` | `ShowSearchWindow(indexes, onSearch)` | インデックス一覧, 検索コールバック | Win32 `CreateWindowEx` で枠なし小窓を表示、Tab/クリック/Esc/Enter 制御 | なし |
-| `pkg/docsearch` | `StartServer(addr, indexes)` | バインドアドレス, インデックス一覧 | HTTP サーバーを起動し WebUI 配信・REST API (/api/search, /api/expand, /api/open) を提供 | サーバーインスタンス |
-| `pkg/docsearch` | `MultiIndexSearch(query, indexIDs)` | クエリ文字列, 対象インデックスID群 | 選択された Bleve インデックスを `IndexAlias` にバインドし横断検索 | 統合検索結果・インデックス別件数 |
+| `pkg/docsearch` | `NewTrayIcon(callbacks)` | 各種アクションコールバック | `Shell_NotifyIconW` でタスクトレイ常駐し、右クリックメニュー（検索・設定・終了）を提供 | トレイインスタンス, エラー |
+| `pkg/docsearch` | `ActivateDocSearchWindow()` | なし | `EnumWindows` で "DocSearch" を含むブラウザウィンドウを検知し `SetForegroundWindow` で最前面化 | 成否 (bool) |
+| `pkg/docsearch` | `TransformJapaneseQuery(query)` | 検索クエリ文字列 | 日本語を含む語句を判定し、二重引用符がない場合に自動的に `"..."` フレーズ化 | 変換後クエリ文字列 |
+| `pkg/docsearch` | `Server.NotifyWebClients(action)` | アクション名 ("focus"/"settings") | `/api/events` SSE 接続中の全クライアントにイベントを即時配信 | なし |
+| `pkg/docsearch` | `Server.HasActiveWebClients()` | なし | 現在 SSE で接続されているブラウザタブが存在するか確認 | 接続有無 (bool) |
+| `pkg/docsearch` | `StartServer(addr, indexes)` | バインドアドレス, インデックス一覧 | HTTP サーバーを起動し WebUI 配信・REST API (/api/search, /api/events, /api/indexes, /api/open) を提供 | サーバーインスタンス |
+| `pkg/docsearch` | `MultiIndexSearch(query, indexIDs)` | クエリ文字列, 対象インデックスID群 | クエリを自動フレーズ変換の上、Bleve インデックスを `IndexAlias` にバインドし横断検索 | 統合検索結果・インデックス別件数 |
 | `pkg/docsearch` | `ExpandQuery(query, model)` | 検索キーワード, LLMモデル名 | Gemini API により表記揺れ・同義語候補を生成 | 関連キーワード配列 |
 | `pkg/docsearch` | `OpenDocument(filePath)` | ファイル絶対パス | OS にファイル/フォルダのオープンを指示 | 実行結果エラー |
 | `pkg/docsearch` | `AddHistory(query)` | 検索キーワード | 検索履歴ファイル（`history.json`）の利用日時・回数を更新永続化 | エラー（失敗時） |
 | `pkg/docsearch` | `GetSuggestions(prefix, limit)` | 入力中文字列プレフィックス, 上限件数 | 履歴から部分一致・前方一致で候補を検索し頻度・日時順ソート | 候補文字列一覧 |
 | `pkg/docsearch` | `ValidateIndexes(indexes)` | インデックス設定一覧 | 各インデックスパスの実在性を `os.Stat` で検証 | 有効インデックス一覧, 欠損インデックス一覧 |
-| `pkg/docsearch` | `OpenIndexDialog()` | 親ウィンドウハンドル | Windows フォルダ/ファイル選択ダイアログを表示して `.bleve` パスを取得 | 選択パス, キャンセル判定, エラー |
 
 ---
 

@@ -211,8 +211,8 @@ func TestShowSearchWindow_Helper(t *testing.T) {
 
 func TestSearchWindow_EdgeCases(t *testing.T) {
 	opts := DefaultWindowOptions()
-	if opts.Width <= 0 || opts.Height <= 0 {
-		t.Errorf("invalid default window options: %v", opts)
+	if opts.Width != 620 || opts.Height != 124 {
+		t.Errorf("expected default window options 620x124, got %dx%d", opts.Width, opts.Height)
 	}
 
 	// Empty controls
@@ -371,5 +371,151 @@ func TestSearchWindow_ModernStyling(t *testing.T) {
 	}
 	if w.CustomFont() != 0 {
 		t.Errorf("expected customFont to be reset to 0 after Close")
+	}
+}
+
+func TestComputeCheckboxLayouts_GuardRail(t *testing.T) {
+	opts := DefaultWindowOptions() // Width = 620
+	// maxChkX is opts.Width - 16 - 80 - 12 = 512
+	// Add button is at opts.Width - 16 - 80 = 524
+	expectedMaxX := opts.Width - 16 - 80 - 12
+	addBtnX := opts.Width - 16 - 80
+
+	t.Run("Normal indexes fit within layout", func(t *testing.T) {
+		indexes := []IndexConfig{
+			{ID: "idx1", Name: "社内規程"},
+			{ID: "idx2", Name: "開発資料"},
+		}
+		statuses := []IndexHealthStatus{
+			{Index: indexes[0], Exists: true},
+			{Index: indexes[1], Exists: true},
+		}
+
+		layouts := ComputeCheckboxLayouts(opts.Width, indexes, statuses)
+		if len(layouts) != 2 {
+			t.Fatalf("expected 2 layouts, got %d", len(layouts))
+		}
+
+		for i, l := range layouts {
+			if !l.Visible {
+				t.Errorf("layout %d should be visible", i)
+			}
+			if l.Y != 64 {
+				t.Errorf("layout %d Y should be 64, got %d", i, l.Y)
+			}
+			if l.Height != 26 {
+				t.Errorf("layout %d Height should be 26, got %d", i, l.Height)
+			}
+			if l.X+l.Width > expectedMaxX {
+				t.Errorf("layout %d right edge (%d) exceeds maxChkX (%d)", i, l.X+l.Width, expectedMaxX)
+			}
+			if l.X+l.Width >= addBtnX {
+				t.Errorf("layout %d right edge (%d) overlaps add button (%d)", i, l.X+l.Width, addBtnX)
+			}
+		}
+	})
+
+	t.Run("Very long index name is clipped to maxChkX", func(t *testing.T) {
+		indexes := []IndexConfig{
+			{ID: "long1", Name: "これは非常に長い名前を持つインデックスであり確実に右端の追加ボタンと衝突する可能性があるもの"},
+		}
+		statuses := []IndexHealthStatus{
+			{Index: indexes[0], Exists: true},
+		}
+
+		layouts := ComputeCheckboxLayouts(opts.Width, indexes, statuses)
+		if len(layouts) != 1 {
+			t.Fatalf("expected 1 layout, got %d", len(layouts))
+		}
+
+		l := layouts[0]
+		if !l.Visible {
+			t.Errorf("clipped checkbox should still be visible")
+		}
+		if l.X+l.Width > expectedMaxX {
+			t.Errorf("clipped checkbox right edge (%d) exceeds maxChkX (%d)", l.X+l.Width, expectedMaxX)
+		}
+		if l.X+l.Width >= addBtnX {
+			t.Errorf("clipped checkbox overlaps add button (%d)", addBtnX)
+		}
+		if l.Width != expectedMaxX-l.X {
+			t.Errorf("expected clipped width %d, got %d", expectedMaxX-l.X, l.Width)
+		}
+	})
+
+	t.Run("Many indexes hide overflow beyond maxChkX", func(t *testing.T) {
+		var indexes []IndexConfig
+		var statuses []IndexHealthStatus
+		for i := 0; i < 10; i++ {
+			idx := IndexConfig{
+				ID:   string(rune('a' + i)),
+				Name: "ドキュメント_" + string(rune('A'+i)),
+			}
+			indexes = append(indexes, idx)
+			statuses = append(statuses, IndexHealthStatus{
+				Index:  idx,
+				Exists: true,
+			})
+		}
+
+		layouts := ComputeCheckboxLayouts(opts.Width, indexes, statuses)
+		visibleCount := 0
+		hiddenCount := 0
+
+		for i, l := range layouts {
+			if l.Visible {
+				visibleCount++
+				if l.X+l.Width > expectedMaxX {
+					t.Errorf("visible layout %d right edge (%d) exceeds maxChkX (%d)", i, l.X+l.Width, expectedMaxX)
+				}
+				if l.X+l.Width >= addBtnX {
+					t.Errorf("visible layout %d overlaps add button at %d", i, addBtnX)
+				}
+			} else {
+				hiddenCount++
+			}
+		}
+
+		if visibleCount == 0 {
+			t.Errorf("expected at least some checkboxes to be visible")
+		}
+		if hiddenCount == 0 {
+			t.Errorf("expected trailing checkboxes to be hidden")
+		}
+	})
+}
+
+func TestSearchWindow_LongAndManyIndexes_NoOverlap(t *testing.T) {
+	dir := t.TempDir()
+	var indexes []IndexConfig
+	for i := 0; i < 6; i++ {
+		p := filepath.Join(dir, string(rune('a'+i)))
+		_ = os.Mkdir(p, 0755)
+		indexes = append(indexes, IndexConfig{
+			ID:              string(rune('a' + i)),
+			Name:            "長いプロジェクト資料名_テスト_" + string(rune('A'+i)),
+			Path:            p,
+			DefaultSelected: i == 0,
+		})
+	}
+
+	w, err := NewSearchWindow(indexes, nil)
+	if err != nil {
+		t.Fatalf("Failed to create SearchWindow: %v", err)
+	}
+	defer w.Close()
+
+	if err := w.Show(); err != nil {
+		t.Fatalf("Failed to show SearchWindow: %v", err)
+	}
+
+	// Verify add button handle is present
+	if w.addBtnHWnd == 0 {
+		t.Errorf("expected addBtnHWnd to be created")
+	}
+
+	// Window should not be in warning state since indexes exist
+	if w.HasWarning() {
+		t.Errorf("expected HasWarning to be false")
 	}
 }

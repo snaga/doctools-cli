@@ -7,8 +7,10 @@
 ├── cmd/                        # CLI / GUI エントリーポイント
 │   ├── doctools-cli/           # AIエージェント向け CLI バイナリ (main.go)
 │   │   └── main.go
-│   └── docsearch-gui/          # 人間向け デスクトップ全文検索GUIバイナリ (main.go)
-│       └── main.go
+│   └── docsearch-gui/          # 人間向け デスクトップ全文検索GUIバイナリ
+│       ├── main.go             # ライフサイクル・自己デタッチ・CLIエントリポイント
+│       ├── detach_windows.go   # Windows 向けデタッチ属性 & Job Breakaway 設定
+│       └── detach_other.go     # 非 Windows 向けデタッチスタブ
 ├── internal/                   # モジュール外部から import 不可のプライベートパッケージ
 │   └── version/                # バージョン情報 (ldflags -X で注入)
 │       └── version.go
@@ -28,8 +30,15 @@
 │   │   └── util.go
 │   ├── docsearch/              # 人間向けデスクトップ検索GUIサービス
 │   │   ├── hook.go             # Win32 低レベルキーフック (Ctrl連打検知)
+│   │   ├── tray.go             # タスクトレイ常駐インターフェース & コールバック
+│   │   ├── tray_windows.go     # Win32 Shell_NotifyIconW & ポップアップメニュー
+│   │   ├── tray_stub.go        # 非 Windows 向けトレイスタブ
+│   │   ├── focus.go            # ブラウザウィンドウ最前面化インターフェース
+│   │   ├── focus_windows.go    # Win32 EnumWindows + SetForegroundWindow
+│   │   ├── focus_stub.go       # 非 Windows 向け前面化スタブ
+│   │   ├── query.go            # 日本語クエリ自動フレーズ化 (Unicode判定)
 │   │   ├── window.go           # Win32 ネイティブ小窓 (検索バー & インデックス選択)
-│   │   ├── server.go           # ローカル検索 Web サーバー & REST API
+│   │   ├── server.go           # ローカル検索 Web サーバー, SSE & REST API
 │   │   ├── expansion.go        # Query Expansion サービス (LLM連携)
 │   │   ├── history.go          # 検索履歴の永続化・サジェストマッチング
 │   │   └── web/                # 埋め込み WebUI アセット (HTML/CSS/JS)

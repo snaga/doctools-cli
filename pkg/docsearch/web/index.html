@@ -304,13 +304,184 @@
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    /* Settings Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05);
+      width: 90%;
+      max-width: 680px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      animation: modalSlide 0.2s ease-out;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(16px); opacity: 0.8; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close-btn {
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close-btn:hover {
+      color: var(--text);
+      background: #f1f5f9;
+    }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      background: #fafafa;
+    }
+    .modal-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .settings-index-container {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .settings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .settings-table th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .settings-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .settings-table tr:last-child td {
+      border-bottom: none;
+    }
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .health-ok {
+      color: #16a34a;
+    }
+    .health-error {
+      color: #dc2626;
+    }
+    .add-index-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #f8fafc;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .form-row {
+      display: flex;
+      gap: 8px;
+    }
+    .form-input {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+      background: #ffffff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+    .btn-delete {
+      color: #dc2626;
+      border-color: #fecaca;
+      background: #ffffff;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    .btn-delete:hover {
+      background: #fee2e2;
+      border-color: #f87171;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div class="header-title">
-        <span>🔍</span> DocSearch
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <div class="header-title" style="margin-bottom: 0;">
+          <span>🔍</span> DocSearch
+        </div>
+        <button id="settingsBtn" class="action-btn" title="インデックス設定" style="display: flex; align-items: center; gap: 6px; font-weight: 500;">
+          ⚙️ <span>設定</span>
+        </button>
       </div>
 
       <div class="search-wrapper">
@@ -347,14 +518,51 @@
     </main>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">⚙️ インデックス設定</div>
+        <button id="modalCloseBtn" class="modal-close-btn" title="閉じる">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <div class="modal-section-title">登録済みインデックス</div>
+          <div id="settingsIndexList" class="settings-index-container">
+            <!-- Table will be rendered dynamically -->
+          </div>
+        </div>
+
+        <div>
+          <div class="modal-section-title">新規インデックス追加</div>
+          <div class="add-index-form">
+            <div class="form-row">
+              <input type="text" id="newIndexPath" class="form-input" placeholder="インデックスフォルダのパス (例: C:\path\to\data.bleve)">
+            </div>
+            <div class="form-row">
+              <input type="text" id="newIndexName" class="form-input" placeholder="表示名 (省略時はフォルダ名から自動生成)">
+              <button id="addIndexBtn" class="search-btn" style="padding: 8px 20px; white-space: nowrap;">追加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="modalFooterCloseBtn" class="action-btn" style="padding: 8px 18px;">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script>
+    window.name = "docsearch_main_tab";
+
     let activeSuggestionIndex = -1;
     let suggestionsData = [];
     let debounceTimer = null;
     let selectedIndexes = new Set();
-    let indexConfigs = [];
+    let currentRegisteredIndexes = [];
+    let lastIndexCounts = {};
 
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
@@ -367,12 +575,191 @@
     const emptyState = document.getElementById('emptyState');
     const toast = document.getElementById('toast');
 
+    // Modal elements
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const modalFooterCloseBtn = document.getElementById('modalFooterCloseBtn');
+    const settingsIndexList = document.getElementById('settingsIndexList');
+    const newIndexPath = document.getElementById('newIndexPath');
+    const newIndexName = document.getElementById('newIndexName');
+    const addIndexBtn = document.getElementById('addIndexBtn');
+
     function showToast(message) {
       toast.textContent = message;
       toast.style.display = 'block';
       setTimeout(() => {
         toast.style.display = 'none';
       }, 3000);
+    }
+
+    function openSettingsModal() {
+      settingsModal.classList.add('open');
+      loadSettingsIndexes();
+    }
+
+    function closeSettingsModal() {
+      settingsModal.classList.remove('open');
+    }
+
+    async function loadSettingsIndexes() {
+      try {
+        const res = await fetch('/api/indexes');
+        if (!res.ok) throw new Error('インデックス一覧の取得に失敗しました');
+        const indexes = await res.json();
+        currentRegisteredIndexes = indexes || [];
+        renderSettingsTable(currentRegisteredIndexes);
+        updateIndexCheckboxes();
+      } catch (err) {
+        settingsIndexList.innerHTML = `<div style="padding: 16px; color: #dc2626;">エラー: ${escapeHTML(err.message)}</div>`;
+      }
+    }
+
+    function renderSettingsTable(indexes) {
+      if (!indexes || indexes.length === 0) {
+        settingsIndexList.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-muted);">登録されているインデックスはありません。</div>';
+        return;
+      }
+
+      let html = `
+        <table class="settings-table">
+          <thead>
+            <tr>
+              <th>表示名</th>
+              <th>パス</th>
+              <th>状態</th>
+              <th style="text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      indexes.forEach(idx => {
+        const statusHtml = idx.exists
+          ? '<span class="health-badge health-ok">✅ 正常</span>'
+          : '<span class="health-badge health-error">⚠️ 見つかりません</span>';
+
+        html += `
+          <tr>
+            <td><strong>${escapeHTML(idx.name || idx.id)}</strong></td>
+            <td style="color: var(--text-muted); word-break: break-all; font-family: monospace; font-size: 12px;">${escapeHTML(idx.path)}</td>
+            <td>${statusHtml}</td>
+            <td style="text-align: right;">
+              <button class="action-btn btn-delete" onclick="deleteIndex('${escapeJsStr(idx.id)}')">削除</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table>`;
+      settingsIndexList.innerHTML = html;
+    }
+
+    async function addIndex() {
+      const path = newIndexPath.value.trim();
+      const name = newIndexName.value.trim();
+      if (!path) {
+        showToast('インデックスフォルダのパスを入力してください');
+        newIndexPath.focus();
+        return;
+      }
+
+      try {
+        addIndexBtn.disabled = true;
+        addIndexBtn.textContent = '追加中...';
+
+        const res = await fetch('/api/indexes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, name, default_selected: true })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'インデックス追加に失敗しました');
+        }
+
+        newIndexPath.value = '';
+        newIndexName.value = '';
+        showToast('インデックスを追加しました');
+        await loadSettingsIndexes();
+      } catch (err) {
+        showToast(`エラー: ${err.message}`);
+      } finally {
+        addIndexBtn.disabled = false;
+        addIndexBtn.textContent = '追加';
+      }
+    }
+
+    async function deleteIndex(id) {
+      if (!confirm(`インデックス「${id}」を登録解除しますか？`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/indexes?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'インデックス削除に失敗しました');
+        }
+
+        selectedIndexes.delete(id);
+        showToast('インデックスを削除しました');
+        await loadSettingsIndexes();
+      } catch (err) {
+        showToast(`エラー: ${err.message}`);
+      }
+    }
+
+    function updateIndexCheckboxes(counts) {
+      if (counts) {
+        lastIndexCounts = counts;
+      }
+
+      if (!currentRegisteredIndexes || currentRegisteredIndexes.length === 0) {
+        indexCheckboxes.innerHTML = '<span style="font-size: 13px; color: var(--text-muted);">（インデックス未登録）</span>';
+        return;
+      }
+
+      indexCheckboxes.innerHTML = '';
+      currentRegisteredIndexes.forEach(idx => {
+        const label = document.createElement('label');
+        label.className = 'filter-checkbox-item';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.value = idx.id;
+
+        if (selectedIndexes.size === 0) {
+          chk.checked = idx.default_selected !== false;
+          if (chk.checked) {
+            selectedIndexes.add(idx.id);
+          }
+        } else {
+          chk.checked = selectedIndexes.has(idx.id);
+        }
+
+        chk.addEventListener('change', () => {
+          if (chk.checked) {
+            selectedIndexes.add(idx.id);
+          } else {
+            selectedIndexes.delete(idx.id);
+          }
+          executeSearch();
+        });
+
+        label.appendChild(chk);
+        label.appendChild(document.createTextNode((idx.name || idx.id) + ' '));
+
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = lastIndexCounts[idx.id] !== undefined ? lastIndexCounts[idx.id] : 0;
+        label.appendChild(badge);
+
+        indexCheckboxes.appendChild(label);
+      });
     }
 
     async function loadSuggestions(prefix) {
@@ -482,49 +869,13 @@
         if (!res.ok) throw new Error('Search request failed');
         const data = await res.json();
 
-        renderIndexCheckboxes(data.index_counts || {});
+        updateIndexCheckboxes(data.index_counts || {});
         renderResults(data);
       } catch (err) {
         resultsList.innerHTML = '';
         emptyState.style.display = 'block';
         emptyState.textContent = `検索中にエラーが発生しました: ${err.message}`;
       }
-    }
-
-    function renderIndexCheckboxes(counts) {
-      // If index checkboxes are not yet created, discover from counts
-      const keys = Object.keys(counts);
-      if (keys.length === 0) return;
-
-      indexCheckboxes.innerHTML = '';
-      keys.forEach(id => {
-        const label = document.createElement('label');
-        label.className = 'filter-checkbox-item';
-
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.value = id;
-        chk.checked = selectedIndexes.size === 0 || selectedIndexes.has(id);
-
-        chk.addEventListener('change', () => {
-          if (chk.checked) {
-            selectedIndexes.add(id);
-          } else {
-            selectedIndexes.delete(id);
-          }
-          executeSearch();
-        });
-
-        label.appendChild(chk);
-        label.appendChild(document.createTextNode(id + ' '));
-
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = counts[id] || 0;
-        label.appendChild(badge);
-
-        indexCheckboxes.appendChild(label);
-      });
     }
 
     function renderResults(data) {
@@ -669,11 +1020,36 @@
       }
     });
 
+    // Settings Modal Listeners
+    settingsBtn.addEventListener('click', openSettingsModal);
+    modalCloseBtn.addEventListener('click', closeSettingsModal);
+    modalFooterCloseBtn.addEventListener('click', closeSettingsModal);
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        closeSettingsModal();
+      }
+    });
+
+    addIndexBtn.addEventListener('click', addIndex);
+    newIndexPath.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addIndex();
+    });
+    newIndexName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addIndex();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && settingsModal.classList.contains('open')) {
+        closeSettingsModal();
+      }
+    });
+
     // Initial Load from URL
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       const params = new URLSearchParams(window.location.search);
       const q = params.get('q');
       const idxs = params.get('indexes');
+      const settingsParam = params.get('settings');
 
       if (idxs) {
         idxs.split(',').forEach(id => {
@@ -682,11 +1058,39 @@
         });
       }
 
+      await loadSettingsIndexes();
+
+      if (settingsParam === '1' || window.location.hash === '#settings') {
+        openSettingsModal();
+      }
+
       if (q) {
         searchInput.value = q;
         executeSearch();
       }
     });
+
+    // Server-Sent Events (SSE) listener for remote window focus/settings actions
+    function setupSSE() {
+      if (!window.EventSource) return;
+      const es = new EventSource('/api/events');
+      es.onmessage = function(e) {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.action === 'focus') {
+            closeSettingsModal();
+            const q = document.getElementById('search-query') || document.getElementById('searchInput');
+            if (q) {
+              q.focus();
+              q.select();
+            }
+          } else if (payload.action === 'settings') {
+            openSettingsModal();
+          }
+        } catch(err) {}
+      };
+    }
+    setupSSE();
   </script>
 </body>
 </html>

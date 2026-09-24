@@ -45,6 +45,7 @@ func TestWebUI_RootEndpoint(t *testing.T) {
 		"id=\"filterBar\"",
 		"id=\"expansionBar\"",
 		"id=\"resultsList\"",
+		"window.name = \"docsearch_main_tab\";",
 	}
 	for _, snippet := range expectedSnippets {
 		if !strings.Contains(body, snippet) {
