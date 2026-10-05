@@ -70,7 +70,11 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 
 ### 要件カテゴリ: PDF操作 (PDF)
 - 要件 PDF-01: PDF テキスト抽出 (`doctools-cli pdf extract-text`)
-  - EARS 受け入れ基準: ［Event-driven］ 有効な PDF ファイルが指定されたとき、`pdfcpu` を用いてテキストを抽出し、Markdown ファイルとして保存してパスを返さなければならない。
+  - ユーザーストーリー: AI エージェントおよびユーザーとして、日本語を含む PDF から文字化けや描画命令オペレータの混入なく、ToUnicode CMap を完全解決した高精度な UTF-8 テキストを抽出し、Markdown/テキストファイルとして取得したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ 有効な PDF ファイルが指定されたとき、システムは `MuPDF (fitz)` を用いて ToUnicode CMap を解決した高精度な UTF-8 テキスト（日本語・縦書き対応）をインメモリで抽出し、ページ区切り（`--- Page N ---`）を含むテキストとして返却、および指定パスへファイル保存しなければならない。
+    - ［Event-driven］ `--start-page` および `--end-page` が指定されたとき、システムは指定範囲 (1-based) のページのみを対象としてテキスト抽出を行わなければならない。
+    - ［Ubiquitous］ システムは、PDF の Contents ストリームにある生の描画オペレータ（PostScript コマンド）や未解決 CID バイト列を出力テキストに混入させてはならない。
 - 要件 PDF-02: PDF 切り出し・結合 (`doctools-cli pdf split`, `doctools-cli pdf merge`)
   - EARS 受け入れ基準: ［Event-driven］ ページ範囲または複数 PDF パスが指定されたとき、`pdfcpu` を用いて新しい PDF ファイルを生成し、出力パスを返さなければならない。
 - 要件 PDF-03: PDF 埋め込み画像抽出 (`doctools-cli pdf extract-images`)
@@ -85,7 +89,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 ### 要件カテゴリ: 全文検索 (FTS)
 - 要件 FTS-01: On-the-fly 差分全文検索インデックス構築 (`doctools-cli fts build`)
   - ユーザーストーリー: AI エージェントとして、ローカルの指定フォルダ内にある各種ドキュメント（Officeバイナリ, PDF等）をOn-the-fly変換・チャンク化し、変更のあったファイルのみメタデータ付きで全文検索インデックスに登録したい。
-  - EARS 受け入れ基準: ［Event-driven］ 対象ディレクトリが指定されたとき、システムは Excel (シート毎), PPT/PDF (ページ毎) 等を On-the-fly で Markdown/CSV テキストへ変換およびチャンク分割し、ファイル共通情報（`file_path`, `file_name`, `file_type`）および形式別位置メタデータ（`unit_type`, `unit_name`, `page_or_index`, `locator`）を保存して `Bleve` インデックスを構築しなければならない。
+  - EARS 受け入れ基準: ［Event-driven］ 対象ディレクトリが指定されたとき、システムは Excel (シート毎), PPT (スライド毎), PDF (ページ毎: `MuPDF (fitz)` による高精度インメモリテキスト抽出) 等を On-the-fly で変換およびチャンク分割し、ファイル共通情報（`file_path`, `file_name`, `file_type`）および形式別位置メタデータ（`unit_type`, `unit_name`, `page_or_index`, `locator`）を保存して `Bleve` インデックスを構築しなければならない。PDF からの抽出テキストに生のベクター描画オペレータ（`/Artifact BMC` 等）を含めてはならない。
   - EARS 受け入れ基準: ［Event-driven / State-driven］ 明示的に拡張子が指定されない限り、システムはデフォルトで Office/PDF バイナリ (`.xlsx`, `.pptx`, `.pdf`, `.docx`) のみをインデックス対象とし、Markdown, CSV, JSON などのテキストファイルは重複登録防止のためスキップしなければならない。
   - EARS 受け入れ基準: ［Event-driven / State-driven］ 既存インデックスが存在する場合、システムはファイルの最終更新日時 (`mtime`) を比較し、前回のインデックス登録時から更新されていないファイルの解析・登録処理をスキップしなければならない。
 - 要件 FTS-02: コンテキスト・メタデータ付き全文検索クエリ (`doctools-cli fts query`)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -54,20 +55,37 @@ func TestPDFOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractText failed: %v", err)
 	}
-	if txtContent == "" {
-		t.Errorf("expected text content")
+	if !strings.Contains(txtContent, "Hello PDF") {
+		t.Errorf("expected text content to contain 'Hello PDF', got %q", txtContent)
+	}
+	if !strings.Contains(txtContent, "--- Page 1 ---") {
+		t.Errorf("expected text content to contain '--- Page 1 ---', got %q", txtContent)
+	}
+
+	savedBytes, err := os.ReadFile(txtOut)
+	if err != nil {
+		t.Fatalf("failed to read saved text file: %v", err)
+	}
+	if string(savedBytes) != txtContent {
+		t.Errorf("saved file content does not match returned text")
 	}
 
 	// Test ExtractText with startPage > 0 and endPage 0
-	_, err = pdf.ExtractText(pdf1, "", 1, 0)
+	txtContent2, err := pdf.ExtractText(pdf1, "", 1, 0)
 	if err != nil {
 		t.Fatalf("ExtractText page 1- failed: %v", err)
 	}
+	if !strings.Contains(txtContent2, "Hello PDF") {
+		t.Errorf("expected text content to contain 'Hello PDF', got %q", txtContent2)
+	}
 
 	// Test ExtractText with startPage 0 and endPage 0 (all pages)
-	_, err = pdf.ExtractText(pdf1, "", 0, 0)
+	txtContent3, err := pdf.ExtractText(pdf1, "", 0, 0)
 	if err != nil {
 		t.Fatalf("ExtractText all pages failed: %v", err)
+	}
+	if !strings.Contains(txtContent3, "Hello PDF") {
+		t.Errorf("expected text content to contain 'Hello PDF', got %q", txtContent3)
 	}
 
 	// Test Merge
@@ -146,12 +164,17 @@ func TestPDFErrorCases(t *testing.T) {
 	// ExtractText on invalid PDF content
 	invalidPdf := filepath.Join(tmpDir, "invalid.pdf")
 	os.WriteFile(invalidPdf, []byte("not a pdf"), 0644)
-	res, err := pdf.ExtractText(invalidPdf, "", 0, 0)
-	if err != nil {
-		t.Errorf("unexpected error on extract content empty: %v", err)
+	_, err = pdf.ExtractText(invalidPdf, "", 0, 0)
+	if err == nil {
+		t.Errorf("expected error for ExtractText on invalid pdf")
 	}
-	if res == "" {
-		t.Errorf("expected placeholder text when no text extracted")
+
+	// ExtractText on invalid page range
+	validPdf := filepath.Join(tmpDir, "valid.pdf")
+	createSamplePDF(t, validPdf)
+	_, err = pdf.ExtractText(validPdf, "", 5, 2)
+	if err == nil {
+		t.Errorf("expected error for ExtractText with invalid page range")
 	}
 
 	// Split non-existent
@@ -223,6 +246,41 @@ func TestPDFErrorCases(t *testing.T) {
 	_, err = pdf.ExtractPages(pdf1, tmpDir, 150, "png", 100, 200, true)
 	if err == nil {
 		t.Errorf("expected error for invalid page range")
+	}
+}
+
+func TestPDFExtractText_Japanese(t *testing.T) {
+	candidates := []string{
+		"../../240920 IDC CIO Summit ホワイトカラーの生産性はなぜ低いのか R01.pdf",
+		"../240920 IDC CIO Summit ホワイトカラーの生産性はなぜ低いのか R01.pdf",
+		"240920 IDC CIO Summit ホワイトカラーの生産性はなぜ低いのか R01.pdf",
+	}
+
+	var samplePDF string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			samplePDF = c
+			break
+		}
+	}
+
+	if samplePDF == "" {
+		t.Skip("Japanese sample PDF not found, skipping")
+	}
+
+	txt, err := pdf.ExtractText(samplePDF, "", 0, 0)
+	if err != nil {
+		t.Fatalf("ExtractText failed on Japanese PDF: %v", err)
+	}
+
+	if !strings.Contains(txt, "ホワイトカラーの生産性はなぜ低いのか") {
+		t.Errorf("expected extracted text to contain 'ホワイトカラーの生産性はなぜ低いのか'")
+	}
+	if !strings.Contains(txt, "SAPジャパン") {
+		t.Errorf("expected extracted text to contain 'SAPジャパン'")
+	}
+	if strings.Contains(txt, "/Artifact BMC") {
+		t.Errorf("extracted text should not contain raw drawing operator '/Artifact BMC'")
 	}
 }
 

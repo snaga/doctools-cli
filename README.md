@@ -7,7 +7,7 @@ Gemini-CLI, Antigravity, Claude, Codex などの AI エージェントが、PDF,
 ## 🚀 特長
 
 1. **シングルバイナリ・ゼロ依存**:
-   - Python 環境や多数の外部ライブラリを一切インストールすることなく、単一の可搬バイナリ `doctools.exe` を配置するだけで即座に動きます（Windows Office COM 連携、Bleve 全文検索エンジン、MuPDF CGO ラスタライザをすべて内蔵）。
+   - Python 環境や多数の外部ライブラリを一切インストールすることなく、単一の可搬バイナリ `doctools-cli.exe` を配置するだけで即座に動きます（Windows Office COM 連携、Bleve 全文検索エンジン、MuPDF CGO ラスタライザをすべて内蔵）。
 2. **Agent-Native CLI 設計**:
    - MCP (Model Context Protocol) のトークンオーバーヘッドや接続待ちを排除。
    - 非対話的実行 (`--force`)、全データコマンドでの `--json` 構造化出力 (`stdout`/`stderr` 完全分離) を徹底保証。
@@ -129,7 +129,7 @@ doctools-cli util unzip <archive.zip> --output-dir <dir> --json
 
 ## 📦 配布用バイナリの使い方
 
-配布された ZIP アーカイブ（例: `doctools-cli-0.6.1-windows-amd64.zip`）を解凍し、中身の `doctools-cli.exe` を任意のフォルダに配置して PATH に通すだけでご利用いただけます。Python や追加インストーラは不要です。
+配布された ZIP アーカイブ（例: `doctools-cli-X.Y.Z-windows-amd64.zip`）を解凍し、中身の `doctools-cli.exe` を任意のフォルダに配置して PATH に通すだけでご利用いただけます。Python や追加インストーラは不要です。
 
 ```bash
 # 動作確認
@@ -138,7 +138,16 @@ doctools-cli agent-context --json
 
 ---
 
+## 📜 更新履歴
+
+### 0.7.1 (2026-10-05)
+- **PDFテキスト抽出の刷新**: `pdfcpu` による生描画オペレータダンプを廃止し、`go-fitz` (MuPDF) による ToUnicode CMap 解決高精度抽出に切り替え。日本語フォントや縦書きの文字化けを完全根絶。
+- **FTSインデックス構築の高速化・高精度化**: PDF パーサーをオンメモリ MuPDF 抽出に刷新。一時ファイル不要化によりインデックス作成を大幅高速化（実機 39 ページを 307ms で処理）し、Bleve での日本語全文検索・スニペットハイライトを完全修正。
+
+---
+
 ## 📜 ライセンス
 
 本プロジェクトは [Apache License 2.0](LICENSE) の下で公開されています。
+
 

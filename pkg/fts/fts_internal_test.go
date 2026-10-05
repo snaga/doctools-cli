@@ -88,12 +88,11 @@ func TestParseFile_Errors(t *testing.T) {
 	}
 }
 
-func TestParsePdf_FallbackText(t *testing.T) {
+func TestParsePdf_ValidPDF(t *testing.T) {
 	tmpDir := t.TempDir()
 	pdfPath := filepath.Join(tmpDir, "dummy_text.pdf")
-	// PDF content that doesn't extract via pdfcpu content stream, forcing raw bytes fallback
-	dummyContent := []byte("%PDF-1.4 Minimal PDF raw text fallback test %%EOF")
-	_ = os.WriteFile(pdfPath, dummyContent, 0644)
+	pdfDummy := []byte("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj 4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj 5 0 obj<</Length 62>>stream\nBT /F1 24 Tf 100 700 Td (PDF search keyword) Tj ET\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \n0000000212 00000 n \n0000000287 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n400\n%%EOF\n")
+	_ = os.WriteFile(pdfPath, pdfDummy, 0644)
 	info, _ := os.Stat(pdfPath)
 
 	chunks, err := parsePdf(pdfPath, "dummy_text.pdf", info)
@@ -104,7 +103,7 @@ func TestParsePdf_FallbackText(t *testing.T) {
 		t.Fatalf("expected 1 chunk, got %d", len(chunks))
 	}
 	if chunks[0].Content == "" {
-		t.Errorf("expected non-empty fallback content")
+		t.Errorf("expected non-empty content")
 	}
 }
 
@@ -424,9 +423,9 @@ func TestBuildAndQuery_WithPdf(t *testing.T) {
 // the test ends.
 func withParseFile(t *testing.T, fn func(context.Context, string, string, os.FileInfo, string) ([]DocumentChunk, error)) {
 	t.Helper()
-	old := parseFileImpl
-	t.Cleanup(func() { parseFileImpl = old })
-	parseFileImpl = fn
+	old := getParseFileImpl()
+	t.Cleanup(func() { setParseFileImpl(old) })
+	setParseFileImpl(fn)
 }
 
 func newTimeoutSource(t *testing.T) (sourceDir string, indexPath string) {
