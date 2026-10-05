@@ -14,52 +14,64 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
-// ExtractText uses pdfcpu to extract content from a PDF file.
+// ExtractText extracts text content from a PDF file using go-fitz.
 func ExtractText(inputPath string, outputPath string, startPage int, endPage int) (string, error) {
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("input file not found: %s", inputPath)
 	}
 
-	conf := model.NewDefaultConfiguration()
-
-	// Extract content to temp dir
-	tmpDir, err := os.MkdirTemp("", "pdf_text_*")
+	doc, err := fitz.New(inputPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp dir: %w", err)
+		return "", fmt.Errorf("failed to open pdf file: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer doc.Close()
 
-	var selectedPages []string
-	if startPage > 0 && endPage >= startPage {
-		selectedPages = []string{fmt.Sprintf("%d-%d", startPage, endPage)}
-	} else if startPage > 0 {
-		selectedPages = []string{fmt.Sprintf("%d-", startPage)}
+	totalPages := doc.NumPage()
+	if totalPages == 0 {
+		return "(No text content extracted)", nil
 	}
 
-	err = api.ExtractContentFile(inputPath, tmpDir, selectedPages, conf)
+	if startPage < 1 {
+		startPage = 1
+	}
+	if endPage <= 0 || endPage > totalPages {
+		endPage = totalPages
+	}
+	if startPage > totalPages || startPage > endPage {
+		return "", fmt.Errorf("invalid page range %d-%d for pdf with %d pages", startPage, endPage, totalPages)
+	}
+
 	var contentBuilder strings.Builder
+	hasContent := false
+	for p := startPage; p <= endPage; p++ {
+		text, err := doc.Text(p - 1)
+		if err != nil {
+			return "", fmt.Errorf("failed to extract text from page %d: %w", p, err)
+		}
+		if strings.TrimSpace(text) != "" {
+			hasContent = true
+		}
+		contentBuilder.WriteString(fmt.Sprintf("--- Page %d ---\n", p))
+		contentBuilder.WriteString(text)
+		contentBuilder.WriteString("\n\n")
+	}
 
-	files, _ := os.ReadDir(tmpDir)
-	if len(files) == 0 {
-		contentBuilder.WriteString("(No text content extracted)")
+	var resText string
+	if !hasContent {
+		resText = "(No text content extracted)"
 	} else {
-		for _, file := range files {
-			b, err := os.ReadFile(filepath.Join(tmpDir, file.Name()))
-			if err == nil {
-				contentBuilder.WriteString(fmt.Sprintf("--- %s ---\n", file.Name()))
-				contentBuilder.Write(b)
-				contentBuilder.WriteString("\n\n")
-			}
+		resText = contentBuilder.String()
+		if strings.TrimSpace(resText) == "" {
+			resText = "(No text content extracted)"
 		}
 	}
 
-	resText := contentBuilder.String()
 	if outputPath != "" {
-		_ = os.MkdirAll(filepath.Dir(outputPath), 0755)
-		_ = os.WriteFile(outputPath, []byte(resText), 0644)
-		abs, err := filepath.Abs(outputPath)
-		if err == nil {
-			outputPath = abs
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+			return "", fmt.Errorf("failed to create output directory: %w", err)
+		}
+		if err := os.WriteFile(outputPath, []byte(resText), 0644); err != nil {
+			return "", fmt.Errorf("failed to write output file: %w", err)
 		}
 	}
 

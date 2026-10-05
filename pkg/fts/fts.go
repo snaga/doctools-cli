@@ -14,12 +14,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/gen2brain/go-fitz"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -429,8 +429,9 @@ func BuildIndexWithOptions(sourceDir string, opts BuildOptions) (*BuildResult, e
 		}
 		ch := make(chan parseResult, 1)
 
+		parser := getParseFileImpl()
 		go func() {
-			chunks, pErr := parseFileImpl(ctx, absPath, rel, info, ext)
+			chunks, pErr := parser(ctx, absPath, rel, info, ext)
 			ch <- parseResult{chunks: chunks, err: pErr}
 		}()
 
@@ -505,7 +506,22 @@ func BuildIndex(sourceDir string, indexPath string) (string, error) {
 
 // parseFileImpl is a variable so that tests can drive the timeout branches of
 // the walk function with a parser that is slow on demand.
-var parseFileImpl = parseFile
+var (
+	parseFileMu   sync.RWMutex
+	parseFileImpl = parseFile
+)
+
+func getParseFileImpl() func(context.Context, string, string, os.FileInfo, string) ([]DocumentChunk, error) {
+	parseFileMu.RLock()
+	defer parseFileMu.RUnlock()
+	return parseFileImpl
+}
+
+func setParseFileImpl(fn func(context.Context, string, string, os.FileInfo, string) ([]DocumentChunk, error)) {
+	parseFileMu.Lock()
+	defer parseFileMu.Unlock()
+	parseFileImpl = fn
+}
 
 func parseFile(ctx context.Context, absPath string, relPath string, info os.FileInfo, ext string) ([]DocumentChunk, error) {
 	if err := ctx.Err(); err != nil {
@@ -656,40 +672,20 @@ func parseXmlTexts(data []byte) []string {
 }
 
 func parsePdf(absPath string, relPath string, info os.FileInfo) ([]DocumentChunk, error) {
-	conf := model.NewDefaultConfiguration()
-	pageCount, err := api.PageCountFile(absPath)
-	if err != nil || pageCount == 0 {
+	doc, err := fitz.New(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open pdf: %w", err)
+	}
+	defer doc.Close()
+
+	pageCount := doc.NumPage()
+	if pageCount == 0 {
 		pageCount = 1
 	}
 
 	var chunks []DocumentChunk
 	for page := 1; page <= pageCount; page++ {
-		tmpDir, err := os.MkdirTemp("", "pdf_fts_*")
-		if err != nil {
-			continue
-		}
-
-		err = api.ExtractContentFile(absPath, tmpDir, []string{strconv.Itoa(page)}, conf)
-		var pageText strings.Builder
-		if err == nil {
-			entries, _ := os.ReadDir(tmpDir)
-			for _, entry := range entries {
-				b, err := os.ReadFile(filepath.Join(tmpDir, entry.Name()))
-				if err == nil {
-					pageText.Write(b)
-					pageText.WriteString("\n")
-				}
-			}
-		}
-		os.RemoveAll(tmpDir)
-
-		text := pageText.String()
-		if strings.TrimSpace(text) == "" {
-			if rawBytes, err := os.ReadFile(absPath); err == nil {
-				text = string(rawBytes)
-			}
-		}
-
+		text, _ := doc.Text(page - 1)
 		locator := fmt.Sprintf("page=%d", page)
 		chunks = append(chunks, DocumentChunk{
 			ID:          fmt.Sprintf("%s#%s", filepath.ToSlash(relPath), locator),

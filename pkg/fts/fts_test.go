@@ -50,7 +50,7 @@ func createTestFiles(t *testing.T, dir string) {
 
 	// 4. PDF file (.pdf)
 	pdfPath := filepath.Join(dir, "sample.pdf")
-	pdfDummy := []byte("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj 4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj 5 0 obj<</Length 62>>stream\nBT /F1 24 Tf 100 700 Td (PDF pdfcpu search keyword) Tj ET\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \n0000000212 00000 n \n0000000287 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n400\n%%EOF\n")
+	pdfDummy := []byte("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj 4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj 5 0 obj<</Length 62>>stream\nBT /F1 24 Tf 100 700 Td (PDF Page search content) Tj ET\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \n0000000212 00000 n \n0000000287 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n400\n%%EOF\n")
 	if err := os.WriteFile(pdfPath, pdfDummy, 0644); err != nil {
 		t.Fatalf("failed to create pdf file: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestFTS_OnTheFlyChunking(t *testing.T) {
 		},
 		{
 			name:          "Excel file search",
-			query:         "keyword",
+			query:         "Excel",
 			wantFileType:  ".xlsx",
 			wantUnitType:  "sheet",
 			wantUnitName:  "Sheet1",
@@ -539,3 +539,69 @@ func TestFTS_DirectoryPruningAndFiltering(t *testing.T) {
 	}
 }
 
+func TestBuildIndex_JapanesePDF(t *testing.T) {
+	pdfName := "240920 IDC CIO Summit ホワイトカラーの生産性はなぜ低いのか R01.pdf"
+	candidates := []string{
+		filepath.Join("..", "..", pdfName),
+		pdfName,
+	}
+
+	var targetPath string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			targetPath = c
+			break
+		}
+	}
+
+	if targetPath == "" {
+		t.Skip("Japanese PDF not found, skipping TestBuildIndex_JapanesePDF")
+	}
+
+	tmpDir := t.TempDir()
+	data, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("failed to read japanese pdf: %v", err)
+	}
+
+	copiedPath := filepath.Join(tmpDir, pdfName)
+	if err := os.WriteFile(copiedPath, data, 0644); err != nil {
+		t.Fatalf("failed to copy japanese pdf: %v", err)
+	}
+
+	indexPath := filepath.Join(tmpDir, "japanese_pdf.bleve")
+	res, err := fts.BuildIndexWithOptions(tmpDir, fts.BuildOptions{
+		IndexPath:   indexPath,
+		Force:       true,
+		IncludeExts: []string{".pdf"},
+	})
+	if err != nil {
+		t.Fatalf("BuildIndexWithOptions failed: %v", err)
+	}
+	if res.IndexedFiles != 1 {
+		t.Fatalf("expected 1 indexed file, got %d", res.IndexedFiles)
+	}
+
+	qRes, err := fts.QueryIndex(indexPath, "ホワイトカラー", 10)
+	if err != nil {
+		t.Fatalf("QueryIndex failed: %v", err)
+	}
+
+	if qRes.TotalHits < 1 {
+		t.Fatalf("expected at least 1 hit for 'ホワイトカラー', got %d", qRes.TotalHits)
+	}
+
+	foundMark := false
+	for _, hit := range qRes.Hits {
+		if strings.Contains(hit.Snippet, "<mark>") {
+			foundMark = true
+		}
+		if strings.Contains(hit.Snippet, "/Artifact BMC") {
+			t.Errorf("hit.Snippet contains drawing operator '/Artifact BMC': %q", hit.Snippet)
+		}
+	}
+
+	if !foundMark {
+		t.Errorf("expected hit.Snippet to contain '<mark>' highlight, hits: %+v", qRes.Hits)
+	}
+}
