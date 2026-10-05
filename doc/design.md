@@ -138,9 +138,9 @@
 
 ### 機能カテゴリ: PDF操作 (PDF)
 - **PDF-F01: pdf extract-text**
-  - **概要**: PDF テキストを Markdown ファイルへ抽出保存。
+  - **概要**: PDF テキストを高精度に抽出し、Markdown/テキストファイルへ保存。
   - **対応要件**: PDF-01
-  - **設計のポイント**: `pdfcpu` を用い、高速にテキスト抽出。
+  - **設計のポイント**: `go-fitz` (MuPDF) を用い、ToUnicode CMap を完全解決して日本語・縦書きを高品質抽出。一時ファイル不要のインメモリ処理により高速化し、描画命令オペレータの混入を完全防止。
 - **PDF-F02: pdf split / merge**
   - **概要**: PDF ページ範囲切り出しおよび複数 PDF 結合。
   - **対応要件**: PDF-02
@@ -158,7 +158,7 @@
 - **FTS-F01: fts build**
   - **概要**: 指定フォルダの全文書 (Excel, PPT, PDF, CSV, Text) を On-the-fly で Markdown/CSV テキストへ変換・チャンク化し、差分チェックを行いメタデータ付き Bleve インデックスを構築。
   - **対応要件**: FTS-01
-  - **設計のポイント**: 各形式パーサーによる On-the-fly テキスト化、`mtime` 比較による未変更ファイルの高速スキップ、Goroutine 並列処理、N-gram 解析、メタデータ (`file_path`, `unit_type`, `locator` 等) の保存。
+  - **設計のポイント**: 各形式パーサーによる On-the-fly テキスト化（PDF 解析には `go-fitz` を用いて各ページの UTF-8 テキストをインメモリ直接抽出）、`mtime` 比較による未変更ファイルの高速スキップ、Goroutine 並列処理、N-gram 解析、メタデータ (`file_path`, `unit_type`, `locator` 等) の保存。
 - **FTS-F02: fts query**
   - **概要**: キーワードおよびブール演算子による全文検索を行い、コンテキスト前後スニペットとAI向けナビゲーション情報を返却。
   - **対応要件**: FTS-02
@@ -461,10 +461,10 @@ graph LR
 | `pkg/pptx` | `ExtractText(path)` | PPTXパス | Zip+XML 解析によりスライドテキスト抽出 | Markdown ファイルパス |
 | `pkg/pptx` | `Merge(paths, outPath)` | PPTXパス一覧, 出力パス | SlideMaster を維持した XML 構造結合 | 結合 PPTX パス |
 | `pkg/pptx` | `ExtractImages(path, slides)` | PPTXパス, スライド番号 | `go-ole` 経由で PowerPoint `slide.Export` 実行 | 生成 PNG パス一覧 |
-| `pkg/pdf` | `ExtractText(path)` | PDFパス | `pdfcpu` によりテキスト抽出 | Markdown ファイルパス |
+| `pkg/pdf` | `ExtractText(path, outPath, startPage, endPage)` | PDFパス, 出力パス, 開始/終了ページ | `go-fitz` (MuPDF) による ToUnicode CMap 解決高精度インメモリテキスト抽出 | 抽出テキストおよびファイルパス |
 | `pkg/pdf` | `ExtractImages(path, outputDir, selectedPages)` | PDFパス, 出力フォルダ, ページ番号配列 | `pdfcpu` による埋め込み画像抽出 | 生成画像パス一覧 |
 | `pkg/pdf` | `ExtractPages(inputPath, outputDir, dpi, format, startPage, endPage, force)` | PDFパス, 出力フォルダ, DPI, フォーマット, 開始/終了ページ, 上書きフラグ | `go-fitz` (MuPDF) による全画面ページ描画と保存 | レンダリング情報と生成画像パス一覧 |
-| `pkg/fts` | `BuildIndex(dirPath, timeout, force)` | ディレクトリパス, タイムアウト時間, 上書きフラグ | 各形式パーサーで On-the-fly テキスト化・`mtime` 差分比較・`context.WithTimeout` 制御を行い Bleve 書き込み | 処理ファイル件数・スキップ件数・タイムアウト件数・チャンク件数・処理時間 |
+| `pkg/fts` | `BuildIndex(dirPath, timeout, force)` | ディレクトリパス, タイムアウト時間, 上書きフラグ | 各形式パーサーで On-the-fly テキスト化（PDFは `go-fitz` 高精度抽出）・`mtime` 差分比較・`context.WithTimeout` 制御を行い Bleve 書き込み | 処理ファイル件数・スキップ件数・タイムアウト件数・チャンク件数・処理時間 |
 | `pkg/fts` | `QueryIndex(query, limit)` | 検索文字列, 件数 | Bleve ハイライトスニペット生成および構造化 JSON (source/target) 出力 | ヒットスコア・ハイライトスニペット・AI位置ナビゲーション構造一覧 |
 | `pkg/pageindex` | `BuildSummaryTree(dir)` | ディレクトリパス | `genai` SDK 経由での構造解析・要約 | `pageindex.json` パス |
 | `pkg/csv` | `DetectEncoding(path)` | CSV/Textパス | `saintfish/chardet` による文字コード自動判定 | エンコーディング名 |
