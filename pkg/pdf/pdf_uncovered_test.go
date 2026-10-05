@@ -189,3 +189,100 @@ func TestMerge_SingleFile(t *testing.T) {
 		t.Errorf("expected non-empty merge result path")
 	}
 }
+
+func TestExtractText_WriteFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	// outputPath points to an existing directory, so WriteFile fails
+	existingDir := filepath.Join(tmpDir, "some_dir")
+	os.MkdirAll(existingDir, 0755)
+
+	_, err := pdf.ExtractText(pdfPath, existingDir, 1, 1)
+	if err == nil {
+		t.Errorf("expected error when writing to existing directory")
+	}
+}
+
+func TestExtractText_MkdirAllError(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	// Create a regular file where parent directory is expected
+	blocker := filepath.Join(tmpDir, "blocker_file")
+	os.WriteFile(blocker, []byte("data"), 0644)
+	badOut := filepath.Join(blocker, "sub", "out.txt")
+
+	_, err := pdf.ExtractText(pdfPath, badOut, 1, 1)
+	if err == nil {
+		t.Errorf("expected error for invalid output path in ExtractText")
+	}
+}
+
+func TestSplit_DefaultOutputPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	// When outputPath is empty, it generates a default filename based on input
+	outPath, err := pdf.Split(pdfPath, "", 1, 1)
+	if err != nil {
+		t.Fatalf("Split with default outputPath failed: %v", err)
+	}
+	if outPath == "" {
+		t.Errorf("expected non-empty output path")
+	}
+	if _, err := os.Stat(outPath); err != nil {
+		t.Errorf("expected generated split pdf to exist: %v", err)
+	}
+}
+
+func TestSplit_InvalidRanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	_, err := pdf.Split(pdfPath, "", 0, 1)
+	if err == nil {
+		t.Errorf("expected error for startPage <= 0")
+	}
+
+	_, err = pdf.Split(pdfPath, "", 2, 1)
+	if err == nil {
+		t.Errorf("expected error for endPage < startPage")
+	}
+}
+
+func TestExtractText_StartPageBeyondTotal(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	_, err := pdf.ExtractText(pdfPath, "", 100, 200)
+	if err == nil {
+		t.Errorf("expected error for startPage > totalPages")
+	}
+}
+
+func TestExtractImages_WithActualImages(t *testing.T) {
+	userPdf := filepath.Join("..", "..", "240920 IDC CIO Summit ホワイトカラーの生産性はなぜ低いのか R01.pdf")
+	if _, err := os.Stat(userPdf); os.IsNotExist(err) {
+		t.Skip("sample user PDF not present")
+	}
+
+	tmpDir := t.TempDir()
+	outDir := filepath.Join(tmpDir, "imgs")
+	paths, err := pdf.ExtractImages(userPdf, outDir, []int{1})
+	if err != nil {
+		t.Fatalf("ExtractImages failed: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Logf("no images extracted from page 1")
+	}
+}
+
+
+
+
