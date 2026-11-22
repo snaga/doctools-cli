@@ -50,13 +50,19 @@ func handleSearchPDF(ctx context.Context, format FileFormat, params DoctoolsRunP
 	startPage := 1
 	endPage := totalPages
 	if params.Options != nil && strings.TrimSpace(params.Options.Pages) != "" {
-		if sp, ep, err := parseRange(params.Options.Pages); err == nil {
-			if sp >= 1 {
-				startPage = sp
-			}
-			if ep >= 1 && ep <= totalPages {
-				endPage = ep
-			}
+		sp, ep, err := parseRange(params.Options.Pages)
+		if err != nil {
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: params.FilePath,
+				Message:  fmt.Sprintf("invalid pages option %q: %v", params.Options.Pages, err),
+			}, nil
+		}
+		if sp >= 1 {
+			startPage = sp
+		}
+		if ep >= 1 && ep <= totalPages {
+			endPage = ep
 		}
 	}
 

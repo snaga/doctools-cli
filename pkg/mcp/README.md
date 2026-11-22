@@ -9,7 +9,7 @@ AI エージェント（Claude, Cursor, Antigravity 等）向けに、Model Cont
   - `stdout` は JSON-RPC 2.0 プロトコル通信専用とし、デバッグログや内部出力は一切出力してはならない（常に `stderr` を使用）。
 - **上位依存の禁止**:
   - `pkg/mcp` は `pkg/cli` などの上位 CLI コマンド層に依存してはならない。
-  - 各種ドキュメント処理エンジン（`pkg/pdf`, `pkg/excel`, `pkg/pptx`, `pkg/fts` など）をディスパッチ対象として呼び出す。
+  - 各種ドキュメント処理エンジン（`pkg/pdf`, `pkg/excel`, `pkg/pptx`, `pkg/html` など）をディスパッチ対象として呼び出す。
 - **Smart Dynamic Response**:
   - 出力テキストサイズが設定閾値（デフォルト 4,000 文字）以下の場合はインラインで直接返却し、超過時は自動で Markdown ファイル保存を行いファイルパス情報を返却する。
 

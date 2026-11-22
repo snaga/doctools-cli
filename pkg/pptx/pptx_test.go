@@ -73,3 +73,32 @@ func TestMergePureGo(t *testing.T) {
 		t.Errorf("expected merged file to exist")
 	}
 }
+
+func TestGetSlideCount(t *testing.T) {
+	tmpDir := t.TempDir()
+	samplePath := filepath.Join(tmpDir, "sample.pptx")
+	createSamplePPTX(t, samplePath)
+
+	// Valid PPTX with 2 slides
+	count, err := pptx.GetSlideCount(samplePath)
+	if err != nil {
+		t.Fatalf("GetSlideCount failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 slides, got %d", count)
+	}
+
+	// Non-existent file
+	_, err = pptx.GetSlideCount(filepath.Join(tmpDir, "missing.pptx"))
+	if err == nil {
+		t.Errorf("expected error for non-existent file")
+	}
+
+	// Corrupt zip file
+	corruptPath := filepath.Join(tmpDir, "corrupt.pptx")
+	os.WriteFile(corruptPath, []byte("not a zip file"), 0644)
+	_, err = pptx.GetSlideCount(corruptPath)
+	if err == nil {
+		t.Errorf("expected error for corrupt pptx")
+	}
+}

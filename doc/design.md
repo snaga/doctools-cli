@@ -538,6 +538,10 @@ graph LR
 | `pkg/pptx` | `Merge(paths, outPath)` | PPTXパス一覧, 出力パス | SlideMaster を維持した XML 構造結合 | 結合 PPTX パス |
 | `pkg/pptx` | `ExtractImages(path, slides)` | PPTXパス, スライド番号 | `go-ole` 経由で PowerPoint `slide.Export` 実行 | 生成 PNG パス一覧 |
 | `pkg/pdf` | `ExtractText(path, outPath, startPage, endPage)` | PDFパス, 出力パス, 開始/終了ページ | `go-fitz` (MuPDF) による ToUnicode CMap 解決高精度インメモリテキスト抽出 | 抽出テキストおよびファイルパス |
+| `pkg/pdf` | `GetPageCount(path)` | PDFパス | `go-fitz` (MuPDF) による総ページ数取得 | 総ページ数 (int) |
+| `pkg/pdf` | `ExtractPageTexts(path)` | PDFパス | `go-fitz` (MuPDF) による全ページインメモリテキスト抽出 | map[int]string (ページ番号->テキスト) |
+| `pkg/pptx` | `GetSlideCount(path)` | PPTXパス | Zip+XML 解析による総スライド数取得 | 総スライド数 (int) |
+| `pkg/html` | `ExtractContent(path)` | HTMLパス | Pure Go 正規表現タグ除去によるインメモリ Markdown 抽出 | 抽出 Markdown テキスト |
 | `pkg/pdf` | `ExtractImages(path, outputDir, selectedPages)` | PDFパス, 出力フォルダ, ページ番号配列 | `pdfcpu` による埋め込み画像抽出 | 生成画像パス一覧 |
 | `pkg/pdf` | `ExtractPages(inputPath, outputDir, dpi, format, startPage, endPage, force)` | PDFパス, 出力フォルダ, DPI, フォーマット, 開始/終了ページ, 上書きフラグ | `go-fitz` (MuPDF) による全画面ページ描画と保存 | レンダリング情報と生成画像パス一覧 |
 | `pkg/fts` | `BuildIndex(dirPath, timeout, force)` | ディレクトリパス, タイムアウト時間, 上書きフラグ | 各形式パーサーで On-the-fly テキスト化（PDFは `go-fitz` 高精度抽出）・`mtime` 差分比較・`context.WithTimeout` 制御を行い Bleve 書き込み | 処理ファイル件数・スキップ件数・タイムアウト件数・チャンク件数・処理時間 |

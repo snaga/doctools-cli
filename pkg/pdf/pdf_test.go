@@ -284,3 +284,61 @@ func TestPDFExtractText_Japanese(t *testing.T) {
 	}
 }
 
+func TestGetPageCount(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "count_test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	// Valid PDF
+	count, err := pdf.GetPageCount(pdfPath)
+	if err != nil {
+		t.Fatalf("GetPageCount failed: %v", err)
+	}
+	if count <= 0 {
+		t.Errorf("expected count > 0, got %d", count)
+	}
+
+	// Non-existent file
+	_, err = pdf.GetPageCount(filepath.Join(tmpDir, "missing.pdf"))
+	if err == nil {
+		t.Errorf("expected error for non-existent file")
+	}
+
+	// Corrupt file
+	corruptPath := filepath.Join(tmpDir, "corrupt.pdf")
+	os.WriteFile(corruptPath, []byte("garbage content"), 0644)
+	_, err = pdf.GetPageCount(corruptPath)
+	if err == nil {
+		t.Errorf("expected error for corrupt pdf")
+	}
+}
+
+func TestExtractPageTexts(t *testing.T) {
+	tmpDir := t.TempDir()
+	pdfPath := filepath.Join(tmpDir, "extract_test.pdf")
+	createSamplePDF(t, pdfPath)
+
+	// Valid PDF
+	pages, err := pdf.ExtractPageTexts(pdfPath)
+	if err != nil {
+		t.Fatalf("ExtractPageTexts failed: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Errorf("expected at least 1 page extracted")
+	}
+
+	// Non-existent file
+	_, err = pdf.ExtractPageTexts(filepath.Join(tmpDir, "missing.pdf"))
+	if err == nil {
+		t.Errorf("expected error for non-existent file")
+	}
+
+	// Corrupt file
+	corruptPath := filepath.Join(tmpDir, "corrupt.pdf")
+	os.WriteFile(corruptPath, []byte("garbage content"), 0644)
+	_, err = pdf.ExtractPageTexts(corruptPath)
+	if err == nil {
+		t.Errorf("expected error for corrupt pdf")
+	}
+}
+
