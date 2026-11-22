@@ -13,8 +13,8 @@ import (
 
 	"doctools-cli/pkg/excel"
 	"doctools-cli/pkg/html"
+	"doctools-cli/pkg/pdf"
 	"doctools-cli/pkg/pptx"
-	"github.com/gen2brain/go-fitz"
 )
 
 // MaxSearchHits defines the maximum number of matches returned for a single search.
@@ -37,7 +37,7 @@ func RegisterDefaultSearchHandlers(d *Dispatcher) {
 }
 
 func handleSearchPDF(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
-	doc, err := fitz.New(params.FilePath)
+	pageTexts, err := pdf.ExtractPageTexts(params.FilePath)
 	if err != nil {
 		return &DoctoolsRunResult{
 			Status:   "error",
@@ -45,21 +45,30 @@ func handleSearchPDF(ctx context.Context, format FileFormat, params DoctoolsRunP
 			Message:  fmt.Sprintf("failed to open PDF file %s: %v", params.FilePath, err),
 		}, nil
 	}
-	defer doc.Close()
 
-	totalPages := doc.NumPage()
+	totalPages := len(pageTexts)
+	startPage := 1
+	endPage := totalPages
+	if params.Options != nil && strings.TrimSpace(params.Options.Pages) != "" {
+		if sp, ep, err := parseRange(params.Options.Pages); err == nil {
+			if sp >= 1 {
+				startPage = sp
+			}
+			if ep >= 1 && ep <= totalPages {
+				endPage = ep
+			}
+		}
+	}
+
 	var hits []SearchHit
 	lowerQuery := strings.ToLower(params.Query)
 
-	for p := 0; p < totalPages; p++ {
-		text, err := doc.Text(p)
-		if err != nil {
-			continue
-		}
+	for p := startPage; p <= endPage; p++ {
+		text := pageTexts[p]
 		if strings.Contains(strings.ToLower(text), lowerQuery) {
 			snippet := makeSnippet(text, params.Query, 60)
 			hits = append(hits, SearchHit{
-				Location: fmt.Sprintf("Page %d", p+1),
+				Location: fmt.Sprintf("Page %d", p),
 				Snippet:  snippet,
 			})
 			if len(hits) >= MaxSearchHits {
@@ -70,10 +79,11 @@ func handleSearchPDF(ctx context.Context, format FileFormat, params DoctoolsRunP
 
 	formatted := formatSearchResults(params.FilePath, params.Query, hits)
 	return &DoctoolsRunResult{
-		Status:    "success",
-		Content:   formatted,
-		FilePath:  params.FilePath,
-		CharCount: utf8.RuneCountInString(formatted),
+		Status:     "success",
+		Content:    formatted,
+		FilePath:   params.FilePath,
+		CharCount:  utf8.RuneCountInString(formatted),
+		TotalPages: totalPages,
 	}, nil
 }
 
@@ -265,7 +275,7 @@ func handleSearchText(ctx context.Context, format FileFormat, params DoctoolsRun
 }
 
 func handleSearchHTML(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
-	outPath, err := html.ExtractText(params.FilePath, "")
+	content, err := html.ExtractContent(params.FilePath)
 	if err != nil {
 		return &DoctoolsRunResult{
 			Status:   "error",
@@ -274,16 +284,7 @@ func handleSearchHTML(ctx context.Context, format FileFormat, params DoctoolsRun
 		}, nil
 	}
 
-	data, err := os.ReadFile(outPath)
-	if err != nil {
-		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to read extracted HTML content from %s: %v", outPath, err),
-		}, nil
-	}
-
-	lines := strings.Split(string(data), "\n")
+	lines := strings.Split(content, "\n")
 	var hits []SearchHit
 	lowerQuery := strings.ToLower(params.Query)
 
@@ -315,31 +316,54 @@ func handleSearchHTML(ctx context.Context, format FileFormat, params DoctoolsRun
 
 // makeSnippet extracts a snippet around the matched query with surrounding context.
 func makeSnippet(text string, query string, maxRadius int) string {
-	lowerText := strings.ToLower(text)
-	lowerQuery := strings.ToLower(query)
+	runes := []rune(text)
+	lowerRunes := []rune(strings.ToLower(text))
+	lowerQueryRunes := []rune(strings.ToLower(query))
 
-	idx := strings.Index(lowerText, lowerQuery)
-	if idx == -1 {
+	if len(lowerQueryRunes) == 0 {
 		return ""
 	}
 
-	start := idx - maxRadius
+	// Find the matching rune index in rune space
+	matchStart := -1
+	for i := 0; i <= len(lowerRunes)-len(lowerQueryRunes); i++ {
+		match := true
+		for j := 0; j < len(lowerQueryRunes); j++ {
+			if lowerRunes[i+j] != lowerQueryRunes[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			matchStart = i
+			break
+		}
+	}
+
+	if matchStart == -1 {
+		return ""
+	}
+
+	matchLen := len(lowerQueryRunes)
+	matchEnd := matchStart + matchLen
+
+	start := matchStart - maxRadius
 	prefix := "..."
 	if start <= 0 {
 		start = 0
 		prefix = ""
 	}
 
-	end := idx + len(query) + maxRadius
+	end := matchEnd + maxRadius
 	suffix := "..."
-	if end >= len(text) {
-		end = len(text)
+	if end >= len(runes) {
+		end = len(runes)
 		suffix = ""
 	}
 
-	before := strings.TrimSpace(strings.ReplaceAll(text[start:idx], "\n", " "))
-	matched := text[idx : idx+len(query)]
-	after := strings.TrimSpace(strings.ReplaceAll(text[idx+len(query):end], "\n", " "))
+	before := strings.TrimSpace(strings.ReplaceAll(string(runes[start:matchStart]), "\n", " "))
+	matched := string(runes[matchStart:matchEnd])
+	after := strings.TrimSpace(strings.ReplaceAll(string(runes[matchEnd:end]), "\n", " "))
 
 	var sb strings.Builder
 	if prefix != "" {

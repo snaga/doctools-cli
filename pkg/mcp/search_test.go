@@ -319,3 +319,26 @@ func TestSearch_MakeSnippetAndFormat(t *testing.T) {
 		t.Errorf("expected ellipsis in long snippet, got %q", res.Content)
 	}
 }
+
+func TestSearch_MakeSnippet_JapaneseMultiByte(t *testing.T) {
+	tempDir := t.TempDir()
+	txtPath := filepath.Join(tempDir, "japanese.txt")
+	jpContent := "これは日本語のテストドキュメントです。エージェントが特定キーワードを検索した際にUTF-8境界で文字化けが発生しないかを徹底検証します。以上。"
+	_ = os.WriteFile(txtPath, []byte(jpContent), 0644)
+
+	res, err := mcp.HandleDoctoolsRun(context.Background(), mcp.DoctoolsRunParams{
+		Command:  "search",
+		FilePath: txtPath,
+		Query:    "特定キーワード",
+	})
+	if err != nil || res.Status != "success" {
+		t.Fatalf("unexpected search result: %+v, err: %v", res, err)
+	}
+	if !strings.Contains(res.Content, "[特定キーワード]") {
+		t.Errorf("expected snippet containing [特定キーワード], got %q", res.Content)
+	}
+	// Verify no unicode replacement character (\ufffd) exists
+	if strings.Contains(res.Content, "\ufffd") {
+		t.Errorf("found corrupted utf-8 replacement char in snippet: %q", res.Content)
+	}
+}
