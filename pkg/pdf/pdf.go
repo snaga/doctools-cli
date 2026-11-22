@@ -14,6 +14,45 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
+// GetPageCount returns the total number of pages in the given PDF file.
+func GetPageCount(inputPath string) (int, error) {
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		return 0, fmt.Errorf("input file not found: %s", inputPath)
+	}
+
+	doc, err := fitz.New(inputPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open pdf file: %w", err)
+	}
+	defer doc.Close()
+
+	return doc.NumPage(), nil
+}
+
+// ExtractPageTexts extracts text from each page in the PDF and returns a map of pageNumber (1-indexed) -> text.
+func ExtractPageTexts(inputPath string) (map[int]string, error) {
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("input file not found: %s", inputPath)
+	}
+
+	doc, err := fitz.New(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open pdf file: %w", err)
+	}
+	defer doc.Close()
+
+	totalPages := doc.NumPage()
+	res := make(map[int]string, totalPages)
+	for p := 1; p <= totalPages; p++ {
+		text, err := doc.Text(p - 1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract text from page %d: %w", p, err)
+		}
+		res[p] = text
+	}
+	return res, nil
+}
+
 // ExtractText extracts text content from a PDF file using go-fitz.
 func ExtractText(inputPath string, outputPath string, startPage int, endPage int) (string, error) {
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {

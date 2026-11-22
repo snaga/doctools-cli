@@ -42,16 +42,19 @@ func handleReadPDF(ctx context.Context, format FileFormat, params DoctoolsRunPar
 		}
 	}
 
+	totalPages, _ := pdf.GetPageCount(params.FilePath)
+
 	text, err := pdf.ExtractText(params.FilePath, "", startPage, endPage)
 	if err != nil {
 		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to extract PDF text from %s: %v", params.FilePath, err),
+			Status:     "error",
+			FilePath:   params.FilePath,
+			TotalPages: totalPages,
+			Message:    fmt.Sprintf("failed to extract PDF text from %s: %v", params.FilePath, err),
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(text, params)
+	return HandleSmartDynamicResponse(text, params, totalPages)
 }
 
 func handleReadExcel(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
@@ -60,16 +63,20 @@ func handleReadExcel(ctx context.Context, format FileFormat, params DoctoolsRunP
 		sheets = []string{strings.TrimSpace(params.Options.Sheet)}
 	}
 
+	allSheets, _ := excel.ListSheets(params.FilePath)
+	totalSheets := len(allSheets)
+
 	text, err := excel.ExtractMarkdown(params.FilePath, sheets, false)
 	if err != nil {
 		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to extract Excel markdown from %s: %v", params.FilePath, err),
+			Status:     "error",
+			FilePath:   params.FilePath,
+			TotalPages: totalSheets,
+			Message:    fmt.Sprintf("failed to extract Excel markdown from %s: %v", params.FilePath, err),
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(text, params)
+	return HandleSmartDynamicResponse(text, params, totalSheets)
 }
 
 func handleReadPPTX(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
@@ -87,16 +94,19 @@ func handleReadPPTX(ctx context.Context, format FileFormat, params DoctoolsRunPa
 		}
 	}
 
+	totalSlides, _ := pptx.GetSlideCount(params.FilePath)
+
 	text, err := pptx.ExtractTextPureGo(params.FilePath, "", startSlide, endSlide)
 	if err != nil {
 		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to extract PPTX text from %s: %v", params.FilePath, err),
+			Status:     "error",
+			FilePath:   params.FilePath,
+			TotalPages: totalSlides,
+			Message:    fmt.Sprintf("failed to extract PPTX text from %s: %v", params.FilePath, err),
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(text, params)
+	return HandleSmartDynamicResponse(text, params, totalSlides)
 }
 
 func handleReadCSV(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
@@ -109,7 +119,7 @@ func handleReadCSV(ctx context.Context, format FileFormat, params DoctoolsRunPar
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(text, params)
+	return HandleSmartDynamicResponse(text, params, 1)
 }
 
 func handleReadText(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
@@ -122,11 +132,11 @@ func handleReadText(ctx context.Context, format FileFormat, params DoctoolsRunPa
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(string(data), params)
+	return HandleSmartDynamicResponse(string(data), params, 1)
 }
 
 func handleReadHTML(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
-	outPath, err := html.ExtractText(params.FilePath, "")
+	content, err := html.ExtractContent(params.FilePath)
 	if err != nil {
 		return &DoctoolsRunResult{
 			Status:   "error",
@@ -135,20 +145,11 @@ func handleReadHTML(ctx context.Context, format FileFormat, params DoctoolsRunPa
 		}, nil
 	}
 
-	data, err := os.ReadFile(outPath)
-	if err != nil {
-		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to read extracted HTML content from %s: %v", outPath, err),
-		}, nil
-	}
-
-	return HandleSmartDynamicResponse(string(data), params)
+	return HandleSmartDynamicResponse(content, params, 1)
 }
 
 // HandleSmartDynamicResponse implements threshold-based inline return vs file-saving logic.
-func HandleSmartDynamicResponse(text string, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
+func HandleSmartDynamicResponse(text string, params DoctoolsRunParams, totalPages int) (*DoctoolsRunResult, error) {
 	maxInlineChars := DefaultMaxInlineChars
 	if params.Options != nil && params.Options.MaxInlineChars > 0 {
 		maxInlineChars = params.Options.MaxInlineChars
@@ -158,10 +159,11 @@ func HandleSmartDynamicResponse(text string, params DoctoolsRunParams) (*Doctool
 
 	if charCount <= maxInlineChars {
 		return &DoctoolsRunResult{
-			Status:    "success",
-			Content:   text,
-			FilePath:  params.FilePath,
-			CharCount: charCount,
+			Status:     "success",
+			Content:    text,
+			FilePath:   params.FilePath,
+			CharCount:  charCount,
+			TotalPages: totalPages,
 		}, nil
 	}
 
@@ -176,25 +178,28 @@ func HandleSmartDynamicResponse(text string, params DoctoolsRunParams) (*Doctool
 
 	if err := os.MkdirAll(filepath.Dir(savePath), 0755); err != nil {
 		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to create directory for %s: %v", savePath, err),
+			Status:     "error",
+			FilePath:   params.FilePath,
+			TotalPages: totalPages,
+			Message:    fmt.Sprintf("failed to create directory for %s: %v", savePath, err),
 		}, nil
 	}
 
 	if err := os.WriteFile(savePath, []byte(text), 0644); err != nil {
 		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: params.FilePath,
-			Message:  fmt.Sprintf("failed to save extracted content to %s: %v", savePath, err),
+			Status:     "error",
+			FilePath:   params.FilePath,
+			TotalPages: totalPages,
+			Message:    fmt.Sprintf("failed to save extracted content to %s: %v", savePath, err),
 		}, nil
 	}
 
 	return &DoctoolsRunResult{
-		Status:    "saved_to_file",
-		FilePath:  savePath,
-		CharCount: charCount,
-		Message:   fmt.Sprintf("Content exceeded inline threshold (%d chars). To protect context, it was safely saved to file '%s'. Please inspect specific sections with read_file or grep.", charCount, savePath),
+		Status:     "saved_to_file",
+		FilePath:   savePath,
+		CharCount:  charCount,
+		TotalPages: totalPages,
+		Message:    fmt.Sprintf("Content exceeded inline threshold (%d chars). To protect context, it was safely saved to file '%s'. Total pages/sheets: %d. Please inspect specific sections with read_file or grep.", charCount, savePath, totalPages),
 	}, nil
 }
 

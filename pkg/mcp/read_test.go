@@ -102,6 +102,9 @@ func TestRead_PDF(t *testing.T) {
 		if res.Status != "success" {
 			t.Errorf("expected success, got %+v", res)
 		}
+		if res.TotalPages <= 0 {
+			t.Errorf("expected TotalPages > 0, got %d", res.TotalPages)
+		}
 		if !strings.Contains(res.Content, "Hello PDF") {
 			t.Errorf("expected content to contain 'Hello PDF', got %q", res.Content)
 		}
@@ -158,6 +161,9 @@ func TestRead_Excel(t *testing.T) {
 		if res.Status != "success" {
 			t.Errorf("expected success, got %+v", res)
 		}
+		if res.TotalPages <= 0 {
+			t.Errorf("expected TotalPages > 0, got %d", res.TotalPages)
+		}
 		if !strings.Contains(res.Content, "Book") || !strings.Contains(res.Content, "Price") {
 			t.Errorf("expected markdown table with 'Book' and 'Price', got %q", res.Content)
 		}
@@ -197,6 +203,9 @@ func TestRead_PPTX(t *testing.T) {
 		}
 		if res.Status != "success" {
 			t.Errorf("expected success, got %+v", res)
+		}
+		if res.TotalPages <= 0 {
+			t.Errorf("expected TotalPages > 0, got %d", res.TotalPages)
 		}
 		if !strings.Contains(res.Content, "Slide 1 Intro") {
 			t.Errorf("expected content to contain 'Slide 1 Intro', got %q", res.Content)
@@ -299,6 +308,12 @@ func TestRead_HTML(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, "Sample Heading") {
 		t.Errorf("expected extracted text from html, got %q", res.Content)
+	}
+
+	// Verify that no .md file was generated in the source directory
+	unexpectedMd := filepath.Join(tempDir, "sample.md")
+	if _, err := os.Stat(unexpectedMd); !os.IsNotExist(err) {
+		t.Errorf("expected %s NOT to be created, but it exists", unexpectedMd)
 	}
 }
 

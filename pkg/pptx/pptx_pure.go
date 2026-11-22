@@ -26,6 +26,31 @@ type sld struct {
 	Texts   []string `xml:"cSld>spTree>sp>txBody>p>r>t"`
 }
 
+// GetSlideCount returns the total number of slides in the given PPTX file.
+func GetSlideCount(inputPath string) (int, error) {
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		return 0, fmt.Errorf("input file not found: %s", inputPath)
+	}
+
+	r, err := zip.OpenReader(inputPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open pptx zip: %w", err)
+	}
+	defer r.Close()
+
+	count := 0
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "ppt/slides/slide") && strings.HasSuffix(f.Name, ".xml") {
+			numStr := strings.TrimPrefix(f.Name, "ppt/slides/slide")
+			numStr = strings.TrimSuffix(numStr, ".xml")
+			if _, err := strconv.Atoi(numStr); err == nil {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
 // ExtractTextPureGo extracts slide text from PPTX archive using pure Go zip+xml parsing.
 func ExtractTextPureGo(inputPath string, outputPath string, startSlide int, endSlide int) (string, error) {
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
