@@ -14,6 +14,7 @@
 │   ├── cli/                    # Cobra コマンド定義 & agent-context
 │   │   ├── root.go
 │   │   ├── agent_context.go
+│   │   ├── mcp.go              # stdio MCP サーバーサブコマンド (doctools-cli mcp)
 │   │   ├── excel.go
 │   │   ├── pptx.go
 │   │   ├── pdf.go
@@ -24,6 +25,7 @@
 │   │   ├── html.go
 │   │   ├── image.go
 │   │   └── util.go
+│   ├── mcp/                    # MCP サーバー実装 (JSON-RPC 2.0 / doctools_run ディスパッチャ)
 │   ├── excel/                  # Excel 操作サービス (excelize + go-ole)
 │   ├── pptx/                   # PPTX 操作サービス (zip+xml + go-ole)
 │   ├── pdf/                    # PDF 操作サービス (pdfcpu + MuPDF fitz)
@@ -36,7 +38,7 @@
 │   ├── models/                 # 標準レスポンス & エラーエンベロープ型定義
 │   └── util/                   # 共通ユーティリティ (ZIP圧縮/解凍・レスポンス成形)
 ├── doc/                        # 🌍 公開用ドキュメント・仕様書マスター
-│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0007)
+│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0008)
 │   ├── product.md              # 製品概要・憲法
 │   ├── tech.md                 # 技術スタック仕様
 │   ├── structure.md            # プロジェクト構造（このファイル）

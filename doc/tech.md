@@ -28,7 +28,13 @@
 - **go test -race -cover**: データ競合の検出およびステートメントカバレッジ 90% 以上の品質担保。
 
 ## アーキテクチャパターン
-- **Agent-Native CLI**: MCP プロトコルに代わり、Unix パイプや JSON 標準出力を活用する特注 CLI。
+- **Agent-Native Dual Interface**:
+  - **CLI モード**: サブプロセス起動によるオーバーヘッドゼロ・Unix パイプ・JSON 標準出力を活用する特注 CLI。
+  - **stdio MCP サーバーモード**: エージェント環境の Tool Definition Block に常駐し、1 級市民として直接発火可能な Model Context Protocol (JSON-RPC 2.0 over stdio) サーバー。
+- **統合ディスパッチャ (Unified Dispatcher / Gateway)**:
+  - ツール乱立（Tool Overload）を抑止するため、単一の `doctools_run` エントリポイントから内部のアクション (`read`, `search`) およびファイル形式ハンドラへディスパッチ。
+- **Smart Dynamic Response (動的閾値ハンドリング)**:
+  - 抽出結果の文字数・トークンサイズを計測し、閾値（デフォルト 4,000 文字 / 約 1,000 トークン、オプション指定可能）以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とハンドル返却に切り替えるハイブリッド機構。
 - **Single Executable Binary**: すべての依存関係（MuPDF C 静的ライブラリ含む）を単一実行ファイル `doctools-cli.exe` に内蔵。
 - **3-Layer Introspection**: `--help` (L1), `doctools-cli agent-context` (L2), `SKILL.md` (L3) による多角的なエージェント誘導。
 - **Handle-based Data Access**: 大容量出力はローカルファイルパス（ハンドル）として返却。

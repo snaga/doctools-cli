@@ -68,6 +68,10 @@
 | 画像操作 | IMAGE-F02 | image crop | 画像の指定領域切り抜き (Crop) | IMAGE-02 |
 | 画像操作 | IMAGE-F03 | image save-clipboard | クリップボード画像の PNG 保存 (Windows) | IMAGE-03 |
 | 共通ユーティリティ | UTIL-F01 | util zip / util unzip | 複数ファイルの ZIP 圧縮、および解凍 | UTIL-01 |
+| MCPサーバー | MCP-F01 | mcp server | stdio JSON-RPC 2.0 による MCP サーバー起動 | MCP-01 |
+| MCPサーバー | MCP-F02 | doctools_run (Dispatcher) | 統合ディスパッチャによる拡張子自動判定と内部エンジン呼び出し | MCP-02 |
+| MCPサーバー | MCP-F03 | Smart Dynamic Response | 文字数閾値に応じたインライン直接返却とファイル保存の動的切り替え | MCP-03 |
+| MCPサーバー | MCP-F04 | search (single file) | 単一ファイル内を対象としたピンポイントキーワード検索 | MCP-04 |
 
 ※注: 要件定義において `EXCEL-04` は欠番となっており、`EXCEL-03` の次は `EXCEL-05` となっています。
 
@@ -147,24 +151,42 @@
   - **概要**: HTML テキスト抽出、画像メタデータ・切り抜き・クリップボード保存、ZIP 圧縮・解凍。
   - **対応要件**: HTML-01, IMAGE-01〜03, UTIL-01
 
+### 機能カテゴリ: MCPサーバー (MCP)
+- **MCP-F01: mcp server (stdio JSON-RPC 2.0)**
+  - **概要**: `doctools-cli mcp` による stdio MCP サーバー起動、エージェント環境（Antigravity, Claude, Cursor 等）の Tool Definition Block への 1 級市民常駐。
+  - **対応要件**: MCP-01
+- **MCP-F02: doctools_run (Unified Dispatcher)**
+  - **概要**: 単一ツールから拡張子を自動判定し、内部パーサー（PDF, XLSX, PPTX, CSV 等）へディスパッチ。
+  - **対応要件**: MCP-02
+- **MCP-F03: Smart Dynamic Response (動的閾値ハンドリング)**
+  - **概要**: 抽出テキストが閾値（デフォルト 4,000 文字）以下は直接 Markdown 返却、超過時は自動でローカルファイル保存とパス返却。
+  - **対応要件**: MCP-03
+- **MCP-F04: 単一ファイル内ピンポイント検索 (command: search)**
+  - **概要**: 対象ファイル内を高速走査し、一致したページ番号・シート名・スライド番号と前後ハイライトスニペットを返却。
+  - **対応要件**: MCP-04
+
 ---
 
 ## アーキテクチャ
 
 ### 設計方針
-1. **Agent-Native CLI 原則の徹底**: 非対話型・JSON構造化出力 (`stdout`/`stderr` 完全分離)・3-Layer Introspection (Layer 1: `--help`, Layer 2: `agent-context`, Layer 3: `SKILL.md`)。
-2. **単一実行バイナリ (Single Binary)**: CGO 静的リンクによる MuPDF / Bleve / `go-ole` を単一バイナリ `doctools-cli.exe` に内蔵し、外部ランタイム依存ゼロを実現。
-3. **Handle-Based データアクセス**: 大容量抽出データはローカルファイルパス（ハンドル）を返却し、エージェントのコンテキスト浪費を防止。
-4. **厳格な単方向依存**: コアパーサーおよびモデル層は上位 CLI 層に依存しない。
+1. **Agent-Native Dual Interface**: 非対話型・JSON構造化出力 (`stdout`/`stderr` 完全分離)・3-Layer Introspection に加え、stdio JSON-RPC 2.0 MCP サーバーを内蔵し、エージェントの推論サンプリング空間に 1 級市民として常駐。
+2. **統合ディスパッチャ (Unified Dispatcher / Gateway)**: ツール過多（Tool Overload）を防ぐため、MCP ツールを `doctools_run` に集約し、拡張子自動判定とコアアクション (`read`, `search`) で整理。
+3. **Smart Dynamic Response**: 小容量はインライン直接返却で 1 ターン完結、大容量はローカルファイルパス（ハンドル）返却でコンテキスト保護を両立。
+4. **単一実行バイナリ (Single Binary)**: CGO 静的リンクによる MuPDF / Bleve / `go-ole` を単一バイナリ `doctools-cli.exe` に内蔵し、外部ランタイム依存ゼロを実現。
+5. **厳格な単方向依存**: コアパーサーおよびモデル層は上位 CLI / MCP 層に依存しない。
 
 ### 全体構成図
 
 ```mermaid
 graph TD
     Agent["AI Agent / LLM / User"] -->|CLI Flag & JSON| CLI["CLI Entrypoint: cmd/doctools-cli"]
+    Agent -->|stdio JSON-RPC 2.0| MCPServer["pkg/mcp (stdio MCP Server)"]
     
     subgraph SingleBinary["Single Binary: doctools-cli.exe"]
         CLI --> PkgCLI["pkg/cli (Cobra Routing & Introspection)"]
+        PkgCLI -->|Subcommand mcp| MCPServer
+        MCPServer --> Dispatcher["doctools_run (Dispatcher)"]
         
         PkgCLI --> ExcelSvc["pkg/excel"]
         PkgCLI --> PPTXSvc["pkg/pptx"]
@@ -177,6 +199,8 @@ graph TD
         PkgCLI --> ImageSvc["pkg/image"]
         PkgCLI --> UtilSvc["pkg/util"]
         PkgCLI --> VersionPkg["internal/version"]
+
+        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & CSVSvc & TextSvc & HTMLSvc
         
         ExcelSvc --> ModelsPkg["pkg/models"]
         PPTXSvc --> ModelsPkg
@@ -188,6 +212,7 @@ graph TD
         HTMLSvc --> ModelsPkg
         ImageSvc --> ModelsPkg
         UtilSvc --> ModelsPkg
+        MCPServer --> ModelsPkg
 
         ExcelSvc --> Excelize["xuri/excelize/v2"]
         PDFSvc --> PDFCpu["pdfcpu Engine"]
@@ -209,8 +234,9 @@ graph TD
 
 ```mermaid
 flowchart TD
-    subgraph Presentation ["1. プレゼンテーション層 (CLI)"]
+    subgraph Presentation ["1. プレゼンテーション・通信層 (CLI & MCP)"]
         CLI["pkg/cli (Cobra コマンドルーティング & agent-context)"]
+        MCP["pkg/mcp (stdio JSON-RPC 2.0 サーバー & doctools_run)"]
     end
 
     subgraph Orchestration ["2. オーケストレーション・高度探索層"]
@@ -234,7 +260,8 @@ flowchart TD
         VERSION["internal/version (バージョン注入)"]
     end
 
-    CLI --> FTS & PI & EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION
+    CLI --> FTS & PI & EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION & MCP
+    MCP --> EXCEL & PDF & PPTX & CSV & TEXT & HTML & FTS & MODELS & UTIL
     FTS --> EXCEL & PPTX & PDF & CSV & TEXT & HTML
     PI --> PDF & PPTX & EXCEL
     EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL --> MODELS
@@ -384,6 +411,79 @@ flowchart TD
     - Input: `files` ([]string) / `file` (string), `--output` (string)
     - Processing: `archive/zip` 圧縮および解凍
     - Output: `{"output_path": "..."}`
+35. **`doctools-cli mcp`**
+    - Input: stdio (JSON-RPC 2.0 messages)
+    - Processing: stdio 経由での Model Context Protocol サーバー起動およびリクエスト処理
+    - Output: stdio (JSON-RPC 2.0 responses)
+
+### MCP インターフェース (`doctools_run`)
+
+エージェント環境（Antigravity, Claude, Cursor 等）向けに、単一の統合ディスパッチャ `doctools_run` を提供します。
+
+#### Tool 定義 (JSON Schema)
+
+```json
+{
+  "name": "doctools_run",
+  "description": "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), or Word (.docx) files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "enum": ["read", "search"],
+        "description": "'read' extracts text/tables from the document; 'search' queries keywords within the specific document"
+      },
+      "file_path": {
+        "type": "string",
+        "description": "Target document path (e.g., 'docs/spec.pdf', 'data/sheet.xlsx')"
+      },
+      "query": {
+        "type": "string",
+        "description": "Search keyword (required when command='search')"
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "pages": { "type": "string", "description": "Page range (e.g. '1-5') for PDF" },
+          "sheet": { "type": "string", "description": "Sheet name for Excel" },
+          "slides": { "type": "string", "description": "Slide numbers for PPTX" },
+          "max_inline_chars": { "type": "integer", "description": "Threshold for inline return (default: 4000)" },
+          "output_path": { "type": "string", "description": "Explicit output path when saving to file" }
+        }
+      }
+    },
+    "required": ["command", "file_path"]
+  }
+}
+```
+
+#### Smart Dynamic Response 処理シーケンス
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Agent as AI Agent (LLM)
+    participant MCP as pkg/mcp (doctools_run)
+    participant Dispatcher as Format Dispatcher
+    participant Parser as Core Parser (PDF/Excel/PPTX)
+    participant FS as Local Filesystem
+
+    Agent->>MCP: call: doctools_run(command="read", file_path="spec.pdf")
+    MCP->>Dispatcher: 拡張子判別 (.pdf)
+    Dispatcher->>Parser: PDF テキスト抽出 (MuPDF)
+    Parser-->>Dispatcher: 抽出テキスト (Markdown)
+
+    alt 文字数 <= max_inline_chars (例: 4,000文字以下)
+        Dispatcher-->>MCP: インライン返却
+        MCP-->>Agent: {"status": "success", "content": "## 概要\n..."} (1ターン完了！)
+    else 文字数 > max_inline_chars (長大ドキュメント)
+        Dispatcher->>FS: .tmp/{basename}_extracted.md に保存
+        FS-->>Dispatcher: 保存完了 (output_path)
+        Dispatcher-->>MCP: ファイルハンドル返却
+        MCP-->>Agent: {"status": "saved_to_file", "file_path": ".tmp/spec_extracted.md", "total_pages": 45, "char_count": 28000, "message": "Content exceeded threshold. Safely saved to file."}
+    end
+```
 
 ---
 
@@ -403,25 +503,36 @@ graph LR
     RootCmd --> HTMLCmd["pkg/cli/html.go"]
     RootCmd --> ImageCmd["pkg/cli/image.go"]
     RootCmd --> UtilCmd["pkg/cli/util.go"]
+    RootCmd --> MCPCmd["pkg/cli/mcp.go"]
     
-    ExcelCmd --> ExcelSvc["pkg/excel"]
-    PPTXCmd --> PPTXSvc["pkg/pptx"]
-    PDFCmd --> PDFSvc["pkg/pdf"]
-    FTSCmd --> FTSSvc["pkg/fts"]
+    MCPCmd --> MCPSvc["pkg/mcp"]
+    MCPSvc --> ExcelSvc["pkg/excel"]
+    MCPSvc --> PPTXSvc["pkg/pptx"]
+    MCPSvc --> PDFSvc["pkg/pdf"]
+    MCPSvc --> FTSSvc["pkg/fts"]
+    MCPSvc --> CSVSvc["pkg/csv"]
+    MCPSvc --> TextSvc["pkg/text"]
+
+    ExcelCmd --> ExcelSvc
+    PPTXCmd --> PPTXSvc
+    PDFCmd --> PDFSvc
+    FTSCmd --> FTSSvc
     PICmd --> PISvc["pkg/pageindex"]
-    CSVCmd --> CSVSvc["pkg/csv"]
-    TextCmd --> TextSvc["pkg/text"]
+    CSVCmd --> CSVSvc
+    TextCmd --> TextSvc
     HTMLCmd --> HTMLSvc["pkg/html"]
     ImageCmd --> ImageSvc["pkg/image"]
     UtilCmd --> UtilSvc["pkg/util"]
 
-    ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc --> ModelsPkg["pkg/models"]
+    ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc & MCPSvc --> ModelsPkg["pkg/models"]
 ```
 
 ### コンポーネント・パッケージ詳細 IPO テーブル
 
 | パッケージ名 | 主要関数/メソッド | 入力 (Input) | 処理概要 (Processing) | 出力 (Output) |
 | :--- | :--- | :--- | :--- | :--- |
+| `pkg/mcp` | `ServeStdio()` | `os.Stdin`, `os.Stdout` | stdio 上で JSON-RPC 2.0 リクエストを処理・ディスパッチ | エラーまたは正常終了 |
+| `pkg/mcp` | `HandleDoctoolsRun(req)` | `DoctoolsRunParams` | コマンド（`read`/`search`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response 判定 | `DoctoolsRunResult` |
 | `pkg/excel` | `ExtractCSV(path, sheets)` | XLSXパス, シート名一覧 | `excelize` で各シート走査し CSV 書き出し | 生成 CSV パス一覧 |
 | `pkg/excel` | `ExtractImages(path, dpi)` | XLSXパス, DPI | `go-ole` で FitToPagesWide 適用し PDF エクスポート | 生成 PDF パス一覧 |
 | `pkg/pptx` | `ExtractText(path)` | PPTXパス | Zip+XML 解析によりスライドテキスト抽出 | Markdown ファイルパス |

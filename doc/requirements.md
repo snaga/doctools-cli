@@ -29,7 +29,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - **要件 NFR-04: テストカバレッジ率 (High Test Coverage)**
   - ユーザーストーリー: 開発者およびユーザーとして、すべてのパッケージが十分にテストされ高品質であることが保証されている状態を望む。なぜならリファクタリングや機能追加時のデグレを確実に防ぐためだ。
   - EARS 受け入れ基準:
-    - ［Ubiquitous］ システムの主要ロジックパッケージ (`pkg/pptx`, `pkg/util`, `pkg/excel`, `pkg/fts`, `pkg/cli`, `pkg/pdf`, `pkg/csv`, `pkg/text`, `pkg/html`, `pkg/image`, `pkg/pageindex`) は、ステートメントカバレッジ 90% 以上を達成しなければならない。
+    - ［Ubiquitous］ システムの主要ロジックパッケージ (`pkg/pptx`, `pkg/util`, `pkg/excel`, `pkg/fts`, `pkg/cli`, `pkg/pdf`, `pkg/csv`, `pkg/text`, `pkg/html`, `pkg/image`, `pkg/pageindex`, `pkg/mcp`) は、ステートメントカバレッジ 90% 以上を達成しなければならない。
 
 ---
 
@@ -162,3 +162,27 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - 要件 UTIL-01: ZIP 圧縮・解凍 (`doctools-cli util zip`, `doctools-cli util unzip`)
   - EARS 受け入れ基準: ［Event-driven］ 対象ファイル群または有効な ZIP ファイルパスが指定されたとき、システムは `archive/zip` による安全な圧縮または解凍を実行し、処理結果パスを返さなければならない。
   - EARS 受け入れ基準: ［Unwanted-behavior］ 解凍時に展開先ディレクトリの外へファイルを展開しようとするパストラバーサル（Zip Slip）を検知したとき、システムは処理を即座に中止し、セキュリティエラーを出力しなければならない。
+
+### 要件カテゴリ: MCPサーバー (MCP)
+- 要件 MCP-01: stdio MCP サーバー起動 (`doctools-cli mcp`)
+  - ユーザーストーリー: AI エージェントとして、標準入出力 (stdio) 経由で JSON-RPC 2.0 メッセージをやり取りし、doctools の全機能を 1 級市民ツールとして利用したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ `doctools-cli mcp` コマンドが実行されたとき、システムは stdio 上で JSON-RPC 2.0 プロトコルをリッスンし、MCP クライアントからの初期化リクエスト (`initialize`) およびツール一覧要求 (`tools/list`) に応答しなければならない。
+    - ［State-driven］ MCP サーバーの実行中、システムは `stdout` を JSON-RPC メッセージ専用とし、デバッグログや警告メッセージを `stdout` に混入させてはならない（`stderr` を使用）。
+- 要件 MCP-02: 統合ディスパッチゲートウェイ (`doctools_run`)
+  - ユーザーストーリー: AI エージェントとして、ドキュメント形式ごとの複雑なコマンド構文やフラグを意識せず、単一のツール窓口から直感的に `read` および `search` アクションを実行したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.docx`, `.csv`, `.html`, `.txt` 等）を自動判別し、対応する内部パーサーまたは検索エンジンへディスパッチしなければならない。
+    - ［Unwanted-behavior］ 未対応の拡張子または存在しない `file_path` が指定されたとき、システムはエラーメッセージおよび利用可能なファイル形式一覧を返却しなければならない。
+    - ［Ubiquitous］ `doctools_run` のツール定義（Description）は、エージェントに対し PDF や Office ファイルの閲覧・検索時に `read_file` や Python スクリプト自作を行わず、必ず本ツールを使用することを義務付ける強い指示（Negative Affordance）を含まなければならない。
+- 要件 MCP-03: Smart Dynamic Response (動的閾値ハンドリング)
+  - ユーザーストーリー: AI エージェントとして、小さなドキュメントは 1 ターンで素早く読み取り、長大なドキュメントではコンテキストウィンドウが溢れないように自動的にファイルとして保護されたい。
+  - EARS 受け入れ基準:
+    - ［Event-driven / State-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値（`max_inline_chars`、デフォルト: 4,000文字）以下の場合、システムはレスポンスの `content` に Markdown テキストを直接格納してインライン返却しなければならない。
+    - ［Event-driven / State-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値を超過した場合、システムはテキストをローカル Markdown ファイル（`.tmp/` または指定出力先）に自動保存し、生成ファイルパス、総ページ数/シート数、文字数を含むメタデータおよびガイドメッセージを返却しなければならない。
+- 要件 MCP-04: 単一ファイル内ピンポイント検索 (`command: "search"`)
+  - ユーザーストーリー: AI エージェントとして、特定の PDF や Excel、PPTX ファイルの内部から指定したキーワードを検索し、一致したページやシートの座標と前後スニペットを取得したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号）と前後ハイライトスニペットの一覧を構造化データとして返却しなければならない。
+    - ［Unwanted-behavior］ 検索クエリが空の場合、システムはクエリ必須エラーを返却しなければならない。
+

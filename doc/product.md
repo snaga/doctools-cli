@@ -4,7 +4,14 @@
 Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカル環境の各種ドキュメント（Excel, PowerPoint, PDF, テキスト等）を高速かつ決定論的に操作・参照・検索できるようにするための **Go言語製 Agent-Native CLI ツール (`doctools-cli.exe`)**。
 
 ## コアコンセプト
-- **"Agent-Native CLI"**: MCP (Model Context Protocol) の持つトークンオーバーヘッドや接続待ちを完全に排除し、CLI から即座に、かつパースしやすい JSON 形式等で結果を返す特注CLI。
+- **"Agent-Native Dual Interface" (CLI & MCP)**: 
+  - **CLI モード**: サブプロセス起動によるオーバーヘッドゼロ・Unix パイプ・決定論的 JSON 出力を提供する超高速実行モード。
+  - **stdio MCP サーバーモード (`doctools mcp`)**: エージェントの認知力学に基づき、Tool Definition Block に 1 級市民として常駐。`read_file` への安易な逃避や Python スクリプト自作の迷走を断ち切り、Office/PDF 操作を 1 ステップで直結発火。
+- **統合ゲートウェイ (`doctools_run`)**:
+  - ツールの乱立（Tool Overload）を防ぐため、Cloudflare 型の Dispatcher パターンを採用し、`read`（抽出）と `search`（単一ファイル内検索）のコアアクションに集約。拡張子に応じたエンジン（PDF/Excel/PPTX）を自動判別。
+- **Smart Dynamic Response (動的閾値ハンドリング)**:
+  - 抽出結果が一定サイズ（例: 4,000文字以下）の場合は直接 Markdown を返却して 1 ターンで完結。
+  - 閾値を超える長大ドキュメントの場合は、自動的にローカル Markdown ファイルへ保存し、ファイルパスとメタデータを返却してエージェントのコンテキスト溢れを決定論的に防止。
 - **シングルバイナリ・ゼロ依存**: Windows 環境で Python やサードパーティライブラリを一切インストールすることなく、単一の可搬バイナリ `doctools-cli.exe` を配置するだけで動作。
 - **Context-Aware / Handle-Based**: 大容量データは標準出力に撒き散らさず、ローカルファイルへの出力パスを返却することで、AI エージェントのコンテキスト消費を最小化。
 
@@ -18,6 +25,9 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
   - **PowerPoint**: テキスト抽出、複数ファイル結合 (純Go)、スライド画像化 (`go-ole` 連携)。
   - **PDF**: ページ分割・結合・埋め込み画像抽出 (`pdfcpu`)、**MuPDF (go-fitz) による高精度日本語テキスト抽出**、全画面スライド画像化 (MuPDF CGO 静的リンク)。
   - **CSV / Text / Image / HTML**: 高速なテキスト・画像・エンコーディング処理。
+- **Agent-Native MCP サーバー (`doctools mcp`)**:
+  - **stdio JSON-RPC 2.0**: エージェント環境（Antigravity, Claude, Cursor 等）のコンテキストに常駐する組み込み MCP サーバー。
+  - **統合ツール `doctools_run`**: 単一のツール窓口から `read`（自動判定・Smart Dynamic Response 付き抽出）および `search`（単一ファイル内ピンポイント検索）を提供。
 - **Agent Introspection (3-Layer Introspection)**:
   - **Layer 1 (`--help`)**: 人間および初見エージェント向けヘルプ。
   - **Layer 2 (`doctools-cli agent-context`)**: 全コマンドの構造・型・引数スキーマを記述した機械判読可能な JSON 出力。
