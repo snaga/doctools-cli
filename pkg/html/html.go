@@ -9,7 +9,8 @@ import (
 )
 
 // ExtractText extracts text / markdown content from HTML.
-func ExtractText(inputPath string, outputPath string) (string, error) {
+// ExtractContent reads an HTML file and returns the extracted Markdown-like text content in-memory without creating any disk files.
+func ExtractContent(inputPath string) (string, error) {
 	b, err := os.ReadFile(inputPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read html file: %w", err)
@@ -35,7 +36,16 @@ func ExtractText(inputPath string, outputPath string) (string, error) {
 			cleanLines = append(cleanLines, trimmed)
 		}
 	}
-	content := strings.Join(cleanLines, "\n\n")
+	return strings.Join(cleanLines, "\n\n"), nil
+}
+
+// ExtractText extracts text from an HTML file and saves it to outputPath.
+// If outputPath is empty, it writes to a file with the same basename and .md extension.
+func ExtractText(inputPath string, outputPath string) (string, error) {
+	content, err := ExtractContent(inputPath)
+	if err != nil {
+		return "", err
+	}
 
 	if outputPath == "" {
 		ext := filepath.Ext(inputPath)
@@ -44,7 +54,9 @@ func ExtractText(inputPath string, outputPath string) (string, error) {
 	}
 
 	_ = os.MkdirAll(filepath.Dir(outputPath), 0755)
-	_ = os.WriteFile(outputPath, []byte(content), 0644)
+	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write output file: %w", err)
+	}
 
 	absPath, err := filepath.Abs(outputPath)
 	if err != nil {
