@@ -169,20 +169,22 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
   - EARS 受け入れ基準:
     - ［Event-driven］ `doctools-cli mcp` コマンドが実行されたとき、システムは stdio 上で JSON-RPC 2.0 プロトコルをリッスンし、MCP クライアントからの初期化リクエスト (`initialize`) およびツール一覧要求 (`tools/list`) に応答しなければならない。
     - ［State-driven］ MCP サーバーの実行中、システムは `stdout` を JSON-RPC メッセージ専用とし、デバッグログや警告メッセージを `stdout` に混入させてはならない（`stderr` を使用）。
+    - ［Unwanted-behavior］ 不正な JSON や未定義の JSON-RPC メソッドが送信されたとき、システムは仕様に準拠した JSON-RPC エラーオブジェクト（ParseError, MethodNotFound 等）を返却しなければならない。
 - 要件 MCP-02: 統合ディスパッチゲートウェイ (`doctools_run`)
   - ユーザーストーリー: AI エージェントとして、ドキュメント形式ごとの複雑なコマンド構文やフラグを意識せず、単一のツール窓口から直感的に `read` および `search` アクションを実行したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.docx`, `.csv`, `.html`, `.txt` 等）を自動判別し、対応する内部パーサーまたは検索エンジンへディスパッチしなければならない。
+    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.csv`, `.html`, `.txt` 等。`.docx` は未対応）を自動判別し、対応する内部パーサーまたは検索エンジンへディスパッチしなければならない。
     - ［Unwanted-behavior］ 未対応の拡張子または存在しない `file_path` が指定されたとき、システムはエラーメッセージおよび利用可能なファイル形式一覧を返却しなければならない。
     - ［Ubiquitous］ `doctools_run` のツール定義（Description）は、エージェントに対し PDF や Office ファイルの閲覧・検索時に `read_file` や Python スクリプト自作を行わず、必ず本ツールを使用することを義務付ける強い指示（Negative Affordance）を含まなければならない。
 - 要件 MCP-03: Smart Dynamic Response (動的閾値ハンドリング)
   - ユーザーストーリー: AI エージェントとして、小さなドキュメントは 1 ターンで素早く読み取り、長大なドキュメントではコンテキストウィンドウが溢れないように自動的にファイルとして保護されたい。
   - EARS 受け入れ基準:
-    - ［Event-driven / State-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値（`max_inline_chars`、デフォルト: 4,000文字）以下の場合、システムはレスポンスの `content` に Markdown テキストを直接格納してインライン返却しなければならない。
-    - ［Event-driven / State-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値を超過した場合、システムはテキストをローカル Markdown ファイル（`.tmp/` または指定出力先）に自動保存し、生成ファイルパス、総ページ数/シート数、文字数を含むメタデータおよびガイドメッセージを返却しなければならない。
+    - ［Event-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値（`max_inline_chars`、デフォルト: 4,000文字）以下の場合、システムはレスポンスの `content` に Markdown テキストを直接格納してインライン返却しなければならない。
+    - ［Event-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値を超過した場合、システムはテキストをローカル Markdown ファイル（`.tmp/` または指定出力先）に自動保存し、生成ファイルパス、総ページ数/シート数、文字数を含むメタデータおよびガイドメッセージを返却しなければならない。
+    - ［Unwanted-behavior］ 不正なページ範囲やスライド範囲が指定されたとき、またはファイル書き込みに失敗したとき、システムはステータス error と詳細なエラーメッセージを返却しなければならない。
 - 要件 MCP-04: 単一ファイル内ピンポイント検索 (`command: "search"`)
   - ユーザーストーリー: AI エージェントとして、特定の PDF や Excel、PPTX ファイルの内部から指定したキーワードを検索し、一致したページやシートの座標と前後スニペットを取得したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号）と前後ハイライトスニペットの一覧を構造化データとして返却しなければならない。
-    - ［Unwanted-behavior］ 検索クエリが空の場合、システムはクエリ必須エラーを返却しなければならない。
+    - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号）と前後ハイライトスニペットの一覧を Markdown 形式テキストとして返却しなければならない。
+    - ［Unwanted-behavior］ 検索クエリが空の場合、または対象ファイル内にクエリが 1 件も一致しなかったとき、システムは適切なエラーメッセージまたは 0 件ヒットである旨の明確な結果を返却しなければならない。
 

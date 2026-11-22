@@ -11,7 +11,7 @@ const (
 	JSONRPCVersion         = "2.0"
 	LatestProtocolVersion  = "2024-11-05"
 	DefaultServerName      = "doctools"
-	DefaultServerVersion   = "0.8.0"
+	DefaultServerVersion   = "0.7.1"
 	DefaultMaxInlineChars  = 4000
 )
 
@@ -191,7 +191,7 @@ func DefaultTools() []Tool {
 	return []Tool{
 		{
 			Name: "doctools_run",
-			Description: "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), or Word (.docx) files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
+			Description: "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), CSV, Text/Markdown, or HTML files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
 			InputSchema: ToolSchema{
 				Type: "object",
 				Properties: map[string]PropertyDef{

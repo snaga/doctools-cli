@@ -67,8 +67,8 @@ func TestServer_Initialize(t *testing.T) {
 	if initResult.ServerInfo.Name != "doctools" {
 		t.Errorf("expected server name 'doctools', got %q", initResult.ServerInfo.Name)
 	}
-	if initResult.ServerInfo.Version != "0.8.0" {
-		t.Errorf("expected server version '0.8.0', got %q", initResult.ServerInfo.Version)
+	if initResult.ServerInfo.Version != "0.7.1" {
+		t.Errorf("expected server version '0.7.1', got %q", initResult.ServerInfo.Version)
 	}
 	if initResult.Capabilities.Tools == nil {
 		t.Errorf("expected tools capability to be present")

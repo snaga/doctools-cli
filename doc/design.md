@@ -10,8 +10,10 @@
     - [全体シーケンス図](#全体シーケンス図)
     - [データフロー図](#データフロー図)
 - [インターフェース](#インターフェース)
-    - [CLI インターフェース (API/Tool相当)](#cli-インターフェース-apitool相当)
-    - [データインターフェース](#データインターフェース)
+    - [CLI インターフェース (主要コマンド IPO)](#cli-インターフェース-主要コマンド-ipo)
+    - [MCP インターフェース (`doctools_run`)](#mcp-インターフェース-doctools_run)
+        - [Tool 定義 (JSON Schema)](#tool-定義-json-schema)
+        - [Smart Dynamic Response 処理シーケンス](#smart-dynamic-response-処理シーケンス)
 - [コンポーネント](#コンポーネント)
     - [ハイレベル・コンポーネント図](#ハイレベルコンポーネント図)
     - [コンポーネント・パッケージ詳細 IPO テーブル](#コンポーネントパッケージ詳細-ipo-テーブル)
@@ -200,7 +202,7 @@ graph TD
         PkgCLI --> UtilSvc["pkg/util"]
         PkgCLI --> VersionPkg["internal/version"]
 
-        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & CSVSvc & TextSvc & HTMLSvc
+        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & HTMLSvc
         
         ExcelSvc --> ModelsPkg["pkg/models"]
         PPTXSvc --> ModelsPkg
@@ -212,7 +214,6 @@ graph TD
         HTMLSvc --> ModelsPkg
         ImageSvc --> ModelsPkg
         UtilSvc --> ModelsPkg
-        MCPServer --> ModelsPkg
 
         ExcelSvc --> Excelize["xuri/excelize/v2"]
         PDFSvc --> PDFCpu["pdfcpu Engine"]
@@ -261,7 +262,7 @@ flowchart TD
     end
 
     CLI --> FTS & PI & EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION & MCP
-    MCP --> EXCEL & PDF & PPTX & CSV & TEXT & HTML & FTS & MODELS & UTIL
+    MCP --> EXCEL & PDF & PPTX & HTML
     FTS --> EXCEL & PPTX & PDF & CSV & TEXT & HTML
     PI --> PDF & PPTX & EXCEL
     EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL --> MODELS
@@ -425,8 +426,8 @@ flowchart TD
 ```json
 {
   "name": "doctools_run",
-  "description": "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), or Word (.docx) files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
-  "parameters": {
+  "description": "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), CSV, Text/Markdown, or HTML files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
+  "inputSchema": {
     "type": "object",
     "properties": {
       "command": {
@@ -509,9 +510,7 @@ graph LR
     MCPSvc --> ExcelSvc["pkg/excel"]
     MCPSvc --> PPTXSvc["pkg/pptx"]
     MCPSvc --> PDFSvc["pkg/pdf"]
-    MCPSvc --> FTSSvc["pkg/fts"]
-    MCPSvc --> CSVSvc["pkg/csv"]
-    MCPSvc --> TextSvc["pkg/text"]
+    MCPSvc --> HTMLSvc["pkg/html"]
 
     ExcelCmd --> ExcelSvc
     PPTXCmd --> PPTXSvc
@@ -520,11 +519,11 @@ graph LR
     PICmd --> PISvc["pkg/pageindex"]
     CSVCmd --> CSVSvc
     TextCmd --> TextSvc
-    HTMLCmd --> HTMLSvc["pkg/html"]
+    HTMLCmd --> HTMLSvc
     ImageCmd --> ImageSvc["pkg/image"]
     UtilCmd --> UtilSvc["pkg/util"]
 
-    ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc & MCPSvc --> ModelsPkg["pkg/models"]
+    ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc --> ModelsPkg["pkg/models"]
 ```
 
 ### コンポーネント・パッケージ詳細 IPO テーブル
@@ -532,7 +531,7 @@ graph LR
 | パッケージ名 | 主要関数/メソッド | 入力 (Input) | 処理概要 (Processing) | 出力 (Output) |
 | :--- | :--- | :--- | :--- | :--- |
 | `pkg/mcp` | `ServeStdio()` | `os.Stdin`, `os.Stdout` | stdio 上で JSON-RPC 2.0 リクエストを処理・ディスパッチ | エラーまたは正常終了 |
-| `pkg/mcp` | `HandleDoctoolsRun(req)` | `DoctoolsRunParams` | コマンド（`read`/`search`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response 判定 | `DoctoolsRunResult` |
+| `pkg/mcp` | `HandleDoctoolsRun(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | コマンド（`read`/`search`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response 判定 | `(*DoctoolsRunResult, error)` |
 | `pkg/excel` | `ExtractCSV(path, sheets)` | XLSXパス, シート名一覧 | `excelize` で各シート走査し CSV 書き出し | 生成 CSV パス一覧 |
 | `pkg/excel` | `ExtractImages(path, dpi)` | XLSXパス, DPI | `go-ole` で FitToPagesWide 適用し PDF エクスポート | 生成 PDF パス一覧 |
 | `pkg/pptx` | `ExtractText(path)` | PPTXパス | Zip+XML 解析によりスライドテキスト抽出 | Markdown ファイルパス |

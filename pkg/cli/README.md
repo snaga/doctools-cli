@@ -18,5 +18,5 @@ AI エージェントおよび人間のための Cobra コマンドルーティ�
   - *Why*: Go コマンドラインツールの事実上の標準であり、サブコマンドツリー構造の構築、型安全なフラグパース、`agent-context` 生成に必要なリフレクション／メタデータ探索が容易なため。
 
 ## 4. 関連仕様書 (Related Specs)
-- 要件: `doc/requirements.md` (NFR-01, NFR-02, NFR-03)
-- 設計: `doc/design.md` (CLI-F01, CLI-F02, INTRO-F01)
+- 要件: `doc/requirements.md` (NFR-01, NFR-02, NFR-03, MCP-01)
+- 設計: `doc/design.md` (CLI-F01, CLI-F02, INTRO-F01, MCP-F01)

@@ -6,7 +6,7 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
 ## コアコンセプト
 - **"Agent-Native Dual Interface" (CLI & MCP)**: 
   - **CLI モード**: サブプロセス起動によるオーバーヘッドゼロ・Unix パイプ・決定論的 JSON 出力を提供する超高速実行モード。
-  - **stdio MCP サーバーモード (`doctools mcp`)**: エージェントの認知力学に基づき、Tool Definition Block に 1 級市民として常駐。`read_file` への安易な逃避や Python スクリプト自作の迷走を断ち切り、Office/PDF 操作を 1 ステップで直結発火。
+  - **stdio MCP サーバーモード (`doctools-cli mcp`)**: エージェントの認知力学に基づき、Tool Definition Block に 1 級市民として常駐。`read_file` への安易な逃避や Python スクリプト自作の迷走を断ち切り、Office/PDF 操作を 1 ステップで直結発火。
 - **統合ゲートウェイ (`doctools_run`)**:
   - ツールの乱立（Tool Overload）を防ぐため、Cloudflare 型の Dispatcher パターンを採用し、`read`（抽出）と `search`（単一ファイル内検索）のコアアクションに集約。拡張子に応じたエンジン（PDF/Excel/PPTX）を自動判別。
 - **Smart Dynamic Response (動的閾値ハンドリング)**:
@@ -25,7 +25,7 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
   - **PowerPoint**: テキスト抽出、複数ファイル結合 (純Go)、スライド画像化 (`go-ole` 連携)。
   - **PDF**: ページ分割・結合・埋め込み画像抽出 (`pdfcpu`)、**MuPDF (go-fitz) による高精度日本語テキスト抽出**、全画面スライド画像化 (MuPDF CGO 静的リンク)。
   - **CSV / Text / Image / HTML**: 高速なテキスト・画像・エンコーディング処理。
-- **Agent-Native MCP サーバー (`doctools mcp`)**:
+- **Agent-Native MCP サーバー (`doctools-cli mcp`)**:
   - **stdio JSON-RPC 2.0**: エージェント環境（Antigravity, Claude, Cursor 等）のコンテキストに常駐する組み込み MCP サーバー。
   - **統合ツール `doctools_run`**: 単一のツール窓口から `read`（自動判定・Smart Dynamic Response 付き抽出）および `search`（単一ファイル内ピンポイント検索）を提供。
 - **Agent Introspection (3-Layer Introspection)**:
