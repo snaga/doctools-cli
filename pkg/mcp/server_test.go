@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -179,7 +178,7 @@ func TestServer_ToolsCall_DefaultPlaceholder(t *testing.T) {
 
 	tempDir := t.TempDir()
 	samplePDF := filepath.Join(tempDir, "test.pdf")
-	_ = os.WriteFile(samplePDF, []byte("%PDF-1.4 dummy"), 0644)
+	createSamplePDF(t, samplePDF)
 
 	escapedPath := strings.ReplaceAll(samplePDF, "\\", "\\\\")
 	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"doctools_run","arguments":{"command":"read","file_path":"%s"}}}`, escapedPath)
@@ -202,8 +201,8 @@ func TestServer_ToolsCall_DefaultPlaceholder(t *testing.T) {
 	if callResult.IsError {
 		t.Errorf("expected isError to be false")
 	}
-	if len(callResult.Content) == 0 || !strings.Contains(callResult.Content[0].Text, "read placeholder for") {
-		t.Errorf("expected placeholder content, got %+v", callResult.Content)
+	if len(callResult.Content) == 0 || !strings.Contains(callResult.Content[0].Text, "Hello PDF") {
+		t.Errorf("expected extracted content, got %+v", callResult.Content)
 	}
 }
 

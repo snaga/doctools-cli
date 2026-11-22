@@ -159,6 +159,20 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 	tempDir := t.TempDir()
 	ctx := context.Background()
 
+	d := mcp.NewDispatcher()
+	// Override read handlers with stubs confirming format routing
+	for _, fmtType := range []mcp.FileFormat{
+		mcp.FormatPDF, mcp.FormatExcel, mcp.FormatPPTX, mcp.FormatCSV, mcp.FormatText, mcp.FormatHTML,
+	} {
+		f := fmtType
+		d.RegisterReadHandler(f, func(ctx context.Context, format mcp.FileFormat, params mcp.DoctoolsRunParams) (*mcp.DoctoolsRunResult, error) {
+			return &mcp.DoctoolsRunResult{
+				Status:  "success",
+				Content: string(format),
+			}, nil
+		})
+	}
+
 	supportedExts := []struct {
 		ext    string
 		format mcp.FileFormat
@@ -187,7 +201,7 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 
 		// Test read command
 		t.Run("read "+item.ext, func(t *testing.T) {
-			res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			res, err := d.Handle(ctx, mcp.DoctoolsRunParams{
 				Command:  "read",
 				FilePath: filePath,
 			})
@@ -204,7 +218,7 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 
 		// Test search command
 		t.Run("search "+item.ext, func(t *testing.T) {
-			res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			res, err := d.Handle(ctx, mcp.DoctoolsRunParams{
 				Command:  "search",
 				FilePath: filePath,
 				Query:    "sample",
