@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"strings"
 )
 
 // JSON-RPC 2.0 and MCP protocol constants.
@@ -10,6 +12,7 @@ const (
 	LatestProtocolVersion  = "2024-11-05"
 	DefaultServerName      = "doctools"
 	DefaultServerVersion   = "0.8.0"
+	DefaultMaxInlineChars  = 4000
 )
 
 // Standard JSON-RPC 2.0 error codes.
@@ -234,5 +237,83 @@ func DefaultTools() []Tool {
 				Required: []string{"command", "file_path"},
 			},
 		},
+	}
+}
+
+// FileFormat represents recognized document formats.
+type FileFormat string
+
+const (
+	FormatPDF     FileFormat = "pdf"
+	FormatExcel   FileFormat = "excel"
+	FormatPPTX    FileFormat = "pptx"
+	FormatCSV     FileFormat = "csv"
+	FormatText    FileFormat = "text"
+	FormatHTML    FileFormat = "html"
+	FormatWord    FileFormat = "word"
+	FormatUnknown FileFormat = "unknown"
+)
+
+// DetectFormat inspects the file extension (case-insensitive) to determine the document format.
+func DetectFormat(filePath string) FileFormat {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".pdf":
+		return FormatPDF
+	case ".xlsx", ".xlsm", ".xls":
+		return FormatExcel
+	case ".pptx":
+		return FormatPPTX
+	case ".csv":
+		return FormatCSV
+	case ".txt", ".md", ".markdown", ".json", ".yaml", ".yml":
+		return FormatText
+	case ".html", ".htm":
+		return FormatHTML
+	case ".docx":
+		return FormatWord
+	default:
+		return FormatUnknown
+	}
+}
+
+// DoctoolsRunOptions represents optional tuning parameters for doctools_run.
+type DoctoolsRunOptions struct {
+	Pages          string `json:"pages,omitempty"`
+	Sheet          string `json:"sheet,omitempty"`
+	Slides         string `json:"slides,omitempty"`
+	MaxInlineChars int    `json:"max_inline_chars,omitempty"`
+	OutputPath     string `json:"output_path,omitempty"`
+}
+
+// DoctoolsRunParams represents arguments passed to doctools_run.
+type DoctoolsRunParams struct {
+	Command  string              `json:"command"`
+	FilePath string              `json:"file_path"`
+	Query    string              `json:"query,omitempty"`
+	Options  *DoctoolsRunOptions `json:"options,omitempty"`
+}
+
+// DoctoolsRunResult represents the unified execution result of doctools_run.
+type DoctoolsRunResult struct {
+	Status     string `json:"status"` // "success", "saved_to_file", "error"
+	Content    string `json:"content,omitempty"`
+	FilePath   string `json:"file_path,omitempty"`
+	TotalPages int    `json:"total_pages,omitempty"`
+	CharCount  int    `json:"char_count,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
+// ToCallToolResult converts a DoctoolsRunResult into standard MCP CallToolResult.
+func (r *DoctoolsRunResult) ToCallToolResult() *CallToolResult {
+	data, _ := json.Marshal(r)
+	return &CallToolResult{
+		Content: []ToolContent{
+			{
+				Type: "text",
+				Text: string(data),
+			},
+		},
+		IsError: r.Status == "error",
 	}
 }

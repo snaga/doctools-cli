@@ -69,10 +69,11 @@ func WithLogger(logger *log.Logger) Option {
 // NewServer creates a new MCP server with default configurations.
 func NewServer(opts ...Option) *Server {
 	s := &Server{
-		name:    DefaultServerName,
-		version: DefaultServerVersion,
-		tools:   DefaultTools(),
-		logger:  log.New(os.Stderr, "[mcp] ", log.LstdFlags),
+		name:        DefaultServerName,
+		version:     DefaultServerVersion,
+		tools:       DefaultTools(),
+		toolHandler: DefaultDispatcher().HandleToolCall,
+		logger:      log.New(os.Stderr, "[mcp] ", log.LstdFlags),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -300,7 +301,7 @@ func (s *Server) handleRequest(ctx context.Context, req *Request) (*Response, er
 				Content: []ToolContent{
 					{
 						Type: "text",
-						Text: fmt.Sprintf("tool not found: %s", params.Name),
+						Text: fmt.Sprintf("unknown tool: %s", params.Name),
 					},
 				},
 				IsError: true,

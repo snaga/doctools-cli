@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -175,7 +177,12 @@ func TestServer_ToolsList(t *testing.T) {
 func TestServer_ToolsCall_DefaultPlaceholder(t *testing.T) {
 	s := mcp.NewServer()
 
-	req := `{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"doctools_run","arguments":{"command":"read","file_path":"test.pdf"}}}`
+	tempDir := t.TempDir()
+	samplePDF := filepath.Join(tempDir, "test.pdf")
+	_ = os.WriteFile(samplePDF, []byte("%PDF-1.4 dummy"), 0644)
+
+	escapedPath := strings.ReplaceAll(samplePDF, "\\", "\\\\")
+	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"doctools_run","arguments":{"command":"read","file_path":"%s"}}}`, escapedPath)
 	respRaw := executeRPC(t, s, req)
 
 	var resp mcp.Response
@@ -195,8 +202,25 @@ func TestServer_ToolsCall_DefaultPlaceholder(t *testing.T) {
 	if callResult.IsError {
 		t.Errorf("expected isError to be false")
 	}
-	if len(callResult.Content) == 0 || callResult.Content[0].Text != "doctools_run placeholder" {
-		t.Errorf("expected placeholder text, got %+v", callResult.Content)
+	if len(callResult.Content) == 0 || !strings.Contains(callResult.Content[0].Text, "read placeholder for") {
+		t.Errorf("expected placeholder content, got %+v", callResult.Content)
+	}
+}
+
+func TestServer_ToolsCall_NilHandlerFallback(t *testing.T) {
+	s := mcp.NewServer(mcp.WithToolHandler(nil))
+
+	req := `{"jsonrpc":"2.0","id":201,"method":"tools/call","params":{"name":"doctools_run","arguments":{"command":"read","file_path":"any.pdf"}}}`
+	respRaw := executeRPC(t, s, req)
+
+	var resp mcp.Response
+	_ = json.Unmarshal([]byte(respRaw), &resp)
+	resultBytes, _ := json.Marshal(resp.Result)
+	var callResult mcp.CallToolResult
+	_ = json.Unmarshal(resultBytes, &callResult)
+
+	if callResult.IsError || callResult.Content[0].Text != "doctools_run placeholder" {
+		t.Errorf("unexpected nil handler fallback result: %+v", callResult)
 	}
 }
 
@@ -220,8 +244,8 @@ func TestServer_ToolsCall_UnknownTool(t *testing.T) {
 	if !callResult.IsError {
 		t.Errorf("expected isError to be true for unknown tool")
 	}
-	if len(callResult.Content) == 0 || !strings.Contains(callResult.Content[0].Text, "tool not found") {
-		t.Errorf("expected 'tool not found' message, got %+v", callResult.Content)
+	if len(callResult.Content) == 0 || !strings.Contains(callResult.Content[0].Text, "unknown tool") {
+		t.Errorf("expected 'unknown tool' message, got %+v", callResult.Content)
 	}
 }
 
