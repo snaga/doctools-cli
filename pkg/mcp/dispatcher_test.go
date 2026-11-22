@@ -134,8 +134,8 @@ func TestDispatcher_Handle_Validation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if res.Status != "error" || !strings.Contains(res.Message, "unsupported file extension") {
-			t.Errorf("expected unsupported extension error, got: %+v", res)
+		if res.Status != "error" || !strings.Contains(res.Message, "unsupported file extension") || !strings.Contains(res.Message, "Supported formats:") {
+			t.Errorf("expected unsupported extension error with supported formats list, got: %+v", res)
 		}
 	})
 
@@ -150,8 +150,8 @@ func TestDispatcher_Handle_Validation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if res.Status != "error" || !strings.Contains(res.Message, "Word (.docx) format is not yet supported") {
-			t.Errorf("expected Word unsupported error, got: %+v", res)
+		if res.Status != "error" || !strings.Contains(res.Message, "Word (.docx) format is not yet supported") || !strings.Contains(res.Message, "Supported formats:") {
+			t.Errorf("expected Word unsupported error with supported formats list, got: %+v", res)
 		}
 	})
 }

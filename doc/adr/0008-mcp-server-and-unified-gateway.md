@@ -22,7 +22,7 @@
 ### 1. 単一の統合ゲートウェイ (`doctools_run`)
 Cloudflare 型の Dispatcher パターンを採用し、エージェントに公開する MCP ツールを単一の `doctools_run` に集約する。
 - **コアアクション**: `read`（テキスト・表の Markdown 抽出）および `search`（単一ファイル内ピンポイント検索）の 2 種に統合。
-- **自動判別**: ファイル拡張子（`.pdf`, `.xlsx`, `.pptx`, `.docx` 等）に基づき、最適な内部エンジン（MuPDF, excelize, zip+xml 等）を自動選択。
+- **自動判別**: ファイル拡張子（`.pdf`, `.xlsx`, `.pptx`, `.csv`, `.html`, `.txt` 等。※`.docx` は将来対応）に基づき、最適な内部エンジン（MuPDF, excelize, zip+xml 等）を自動選択。
 - **Negative Affordance (Description Hacking)**: ツールの説明文に「PDF/Excel/PPTX の調査時は `read_file` や Python 自作を禁止し、必ず本ツールを使うこと」を明記し、毎ターン Tool Definition Block から強烈な注意を喚起。
 
 ### 2. Smart Dynamic Response (動的閾値ハンドリング)

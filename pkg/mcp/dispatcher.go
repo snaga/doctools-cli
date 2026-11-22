@@ -118,11 +118,12 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 	}
 
 	format := DetectFormat(trimmedPath)
+	supportedFormatsMsg := "Supported formats: PDF (.pdf), Excel (.xlsx, .xlsm), PowerPoint (.pptx), CSV (.csv), Text (.txt, .md, .markdown, .json, .yaml, .yml), HTML (.html, .htm)"
 	if format == FormatUnknown {
 		return &DoctoolsRunResult{
 			Status:   "error",
 			FilePath: trimmedPath,
-			Message:  fmt.Sprintf("unsupported file extension %q for file: %s", filepath.Ext(trimmedPath), trimmedPath),
+			Message:  fmt.Sprintf("unsupported file extension %q for file: %s. %s", filepath.Ext(trimmedPath), trimmedPath, supportedFormatsMsg),
 		}, nil
 	}
 
@@ -130,7 +131,7 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 		return &DoctoolsRunResult{
 			Status:   "error",
 			FilePath: trimmedPath,
-			Message:  "Word (.docx) format is not yet supported in this version",
+			Message:  fmt.Sprintf("Word (.docx) format is not yet supported in this version. %s", supportedFormatsMsg),
 		}, nil
 	}
 
