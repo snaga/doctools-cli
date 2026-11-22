@@ -76,7 +76,7 @@ flowchart TD
 | **`pkg/fts`** | [`pkg/fts/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/fts/README.md) | Pure Go `Bleve` 全文検索、On-the-fly チャンク化、隠しフォルダ高速枝刈り |
 | **`pkg/pageindex`** | [`pkg/pageindex/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pageindex/README.md) | 階層構造 RAG、Progressive Disclosure（段階的深さ探索）、ピンポイント抽出 |
 | **`pkg/excel`** | [`pkg/excel/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/excel/README.md) | `excelize` による CSV/Markdown 抽出、セル差分 (Diff)、安全パッチ (Patch)、`go-ole` 画像化 |
-| **`pkg/pdf`** | [`pkg/pdf/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pdf/README.md) | `pdfcpu` (テキスト・分割・結合) + `go-fitz` MuPDF CGO (高精細スライド画像化) |
+| **`pkg/pdf`** | [`pkg/pdf/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pdf/README.md) | `pdfcpu` (分割・結合・埋め込み画像抽出) + `go-fitz` MuPDF CGO (高精度日本語テキスト抽出・スライド画像化) |
 | **`pkg/pptx`** | [`pkg/pptx/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pptx/README.md) | Pure Go Zip+XML テキスト抽出・結合 + `go-ole` スライド画像化 |
 | **`pkg/csv`** | [`pkg/csv/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/csv/README.md) | `chardet` 自動文字コード判別、1-based 部分読み込み、セル内検索 |
 | **`pkg/text`** | [`pkg/text/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/text/README.md) | 行ストリーム処理 (`head`/`tail`/`grep`)、文字コード変換 (CP932/UTF-8) |

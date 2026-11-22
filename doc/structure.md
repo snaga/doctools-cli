@@ -4,13 +4,9 @@
 
 ```text
 .
-├── cmd/                        # CLI / GUI エントリーポイント
-│   ├── doctools-cli/           # AIエージェント向け CLI バイナリ (main.go)
-│   │   └── main.go
-│   └── docsearch-gui/          # 人間向け デスクトップ全文検索GUIバイナリ
-│       ├── main.go             # ライフサイクル・自己デタッチ・CLIエントリポイント
-│       ├── detach_windows.go   # Windows 向けデタッチ属性 & Job Breakaway 設定
-│       └── detach_other.go     # 非 Windows 向けデタッチスタブ
+├── cmd/                        # CLI エントリーポイント
+│   └── doctools-cli/           # AIエージェント向け CLI バイナリ (main.go)
+│       └── main.go
 ├── internal/                   # モジュール外部から import 不可のプライベートパッケージ
 │   └── version/                # バージョン情報 (ldflags -X で注入)
 │       └── version.go
@@ -28,20 +24,6 @@
 │   │   ├── html.go
 │   │   ├── image.go
 │   │   └── util.go
-│   ├── docsearch/              # 人間向けデスクトップ検索GUIサービス
-│   │   ├── hook.go             # Win32 低レベルキーフック (Ctrl連打検知)
-│   │   ├── tray.go             # タスクトレイ常駐インターフェース & コールバック
-│   │   ├── tray_windows.go     # Win32 Shell_NotifyIconW & ポップアップメニュー
-│   │   ├── tray_stub.go        # 非 Windows 向けトレイスタブ
-│   │   ├── focus.go            # ブラウザウィンドウ最前面化インターフェース
-│   │   ├── focus_windows.go    # Win32 EnumWindows + SetForegroundWindow
-│   │   ├── focus_stub.go       # 非 Windows 向け前面化スタブ
-│   │   ├── query.go            # 日本語クエリ自動フレーズ化 (Unicode判定)
-│   │   ├── window.go           # Win32 ネイティブ小窓 (検索バー & インデックス選択)
-│   │   ├── server.go           # ローカル検索 Web サーバー, SSE & REST API
-│   │   ├── expansion.go        # Query Expansion サービス (LLM連携)
-│   │   ├── history.go          # 検索履歴の永続化・サジェストマッチング
-│   │   └── web/                # 埋め込み WebUI アセット (HTML/CSS/JS)
 │   ├── excel/                  # Excel 操作サービス (excelize + go-ole)
 │   ├── pptx/                   # PPTX 操作サービス (zip+xml + go-ole)
 │   ├── pdf/                    # PDF 操作サービス (pdfcpu + MuPDF fitz)
@@ -51,9 +33,10 @@
 │   ├── text/                   # テキスト操作・Grep・文字コード判定 (chardet)
 │   ├── html/                   # HTML テキスト抽出サービス
 │   ├── image/                  # 画像メタデータ・クロップ・クリップボード
+│   ├── models/                 # 標準レスポンス & エラーエンベロープ型定義
 │   └── util/                   # 共通ユーティリティ (ZIP圧縮/解凍・レスポンス成形)
 ├── doc/                        # 🌍 公開用ドキュメント・仕様書マスター
-│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0005)
+│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0007)
 │   ├── product.md              # 製品概要・憲法
 │   ├── tech.md                 # 技術スタック仕様
 │   ├── structure.md            # プロジェクト構造（このファイル）
@@ -61,15 +44,12 @@
 │   └── design.md               # 詳細設計書
 ├── dist/                       # 配布パッケージ成果物 (.gitignore 対象)
 │   └── doctools-cli-{ver}-{os}-{arch}/
-│       ├── doctools-cli.exe    # Agent-Native CLI バイナリ
-│       └── docsearch-gui.exe   # 人間向けデスクトップ検索GUIバイナリ
+│       └── doctools-cli.exe    # Agent-Native CLI 単一バイナリ
 ├── go.mod                      # Go モジュール定義
 ├── go.sum                      # Go 依存関係チェックサム
 ├── LICENSE                     # ライセンスファイル (Apache-2.0)
 └── README.md                   # プロジェクト説明・エージェント指示プロンプト
 ```
-
-
 
 ## 命名規則
 - ディレクトリ / パッケージ名: 小文字単語・簡潔（例: `excel`, `pptx`, `pdf`）
