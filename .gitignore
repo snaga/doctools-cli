@@ -5,6 +5,7 @@ AGENTS.md
 GEMINI.md
 /.gemini
 /.agent/
+/.agents/
 /.claude/
 /doc_internal/
 *.bat
