@@ -41,13 +41,14 @@ func HandleDoctoolsRun(ctx context.Context, params DoctoolsRunParams) (*Doctools
 	return DefaultDispatcher().Handle(ctx, params)
 }
 
-// NewDispatcher creates a new Dispatcher with default read handlers registered.
+// NewDispatcher creates a new Dispatcher with default read and search handlers registered.
 func NewDispatcher() *Dispatcher {
 	d := &Dispatcher{
 		readHandlers:   make(map[FileFormat]ReadHandlerFunc),
 		searchHandlers: make(map[FileFormat]SearchHandlerFunc),
 	}
 	RegisterDefaultReadHandlers(d)
+	RegisterDefaultSearchHandlers(d)
 	return d
 }
 

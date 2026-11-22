@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,7 +161,7 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 	ctx := context.Background()
 
 	d := mcp.NewDispatcher()
-	// Override read handlers with stubs confirming format routing
+	// Override read and search handlers with stubs confirming format routing
 	for _, fmtType := range []mcp.FileFormat{
 		mcp.FormatPDF, mcp.FormatExcel, mcp.FormatPPTX, mcp.FormatCSV, mcp.FormatText, mcp.FormatHTML,
 	} {
@@ -169,6 +170,12 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 			return &mcp.DoctoolsRunResult{
 				Status:  "success",
 				Content: string(format),
+			}, nil
+		})
+		d.RegisterSearchHandler(f, func(ctx context.Context, format mcp.FileFormat, params mcp.DoctoolsRunParams) (*mcp.DoctoolsRunResult, error) {
+			return &mcp.DoctoolsRunResult{
+				Status:  "success",
+				Content: fmt.Sprintf("%s:%s", format, params.Query),
 			}, nil
 		})
 	}
