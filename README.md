@@ -13,6 +13,9 @@ Gemini-CLI, Antigravity, Claude, Codex などの AI エージェントが、PDF,
    - 非対話的実行 (`--force`)、全データコマンドでの `--json` 構造化出力 (`stdout`/`stderr` 完全分離) を徹底保証。
 3. **3-Layer Introspection (AI 自律探索機能)**:
    - `doctools-cli agent-context --json` コマンドを1回実行するだけで、全 36 サブコマンドの構文やパラメータ型スキーマを構造化 JSON で自己探索できます。
+4. **Agent-Native stdio MCP サーバーモード (`doctools-cli mcp`)**:
+   - stdio JSON-RPC 2.0 に対応し、AI エージェント（Claude, Cursor, Antigravity 等）の Tool Definition Block に 1 級市民として常駐可能。
+   - 単一ゲートウェイ `doctools_run` による拡張子自動判別と、Smart Dynamic Response（4,000文字閾値によるコンテキスト保護）を提供。
 
 ---
 
@@ -67,6 +70,9 @@ AI エージェント（Claude, Gemini, Cursor, Codex 等）に `doctools` CLI �
 ```bash
 # 探索・メタ情報 (Layer 2 Introspection)
 doctools-cli agent-context [--json]
+
+# Agent-Native stdio MCP サーバー (stdio JSON-RPC 2.0 & 統合ディスパッチャ doctools_run)
+doctools-cli mcp
 
 # バージョン確認（--help の先頭にも表示されます）
 doctools-cli --version
@@ -139,6 +145,12 @@ doctools-cli agent-context --json
 ---
 
 ## 📜 更新履歴
+
+### 0.8.0 (Unreleased)
+- **Agent-Native stdio MCP サーバーの搭載 (`doctools-cli mcp`)**: AI エージェント（Claude Desktop, Cursor, Antigravity 等）の Tool 定義として 1 級市民で常駐可能な stdio JSON-RPC 2.0 サーバーを内蔵。
+- **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read` および `search` アクションを実行可能。
+- **Smart Dynamic Response (動的閾値ハンドリング)**: 抽出テキストが 4,000 文字以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とメタデータ（総ページ/シート数、文字数）を返却して LLM のコンテキストウィンドウ枯渇を防止。
+- **単一ファイル内ピンポイント検索 (`command: search`)**: 指定した単一ファイル内からキーワード周辺のハイライトスニペットを抽出し、該当ページ番号やセル番地を高速取得。
 
 ### 0.7.1 (2026-10-05)
 - **PDFテキスト抽出の刷新**: `pdfcpu` による生描画オペレータダンプを廃止し、`go-fitz` (MuPDF) による ToUnicode CMap 解決高精度抽出に切り替え。日本語フォントや縦書きの文字化けを完全根絶。
