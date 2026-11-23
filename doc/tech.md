@@ -13,14 +13,12 @@
   - **選定理由**: 純 Go 製の軽量な PDF 操作ライブラリ。PDF の分割（Split）、マージ（Merge）、埋め込み画像抽出などの構造操作を CGO なしで高速・安全に処理するために採用。
 - **MuPDF (fitz CGO Binding / gen2brain/go-fitz)**
   - **選定理由**: PDF ページをマルチモーダル LLM 向けに最高品質で PNG/JPG 画像化するラスタライザ、および **ToUnicode CMap 完全解決による高精度日本語テキスト抽出エンジン** として採用。PyMuPDF と同等のレイアウト解析・フォントマッピング能力を内蔵し、文字化けや描画オペレータ混入のない純粋な UTF-8 テキスト抽出と高速 FTS インデックス構築を実現。ビルド時に `.a` 静的ライブラリとして完全内蔵。
-- **blevesearch/bleve**
+- **github.com/blevesearch/bleve/v2**
   - **選定理由**: 純 Go 製の高性能全文検索エンジン。追加サーバー不要で、N-gram による日本語検索および高速インデックス構築に対応。
 - **go-ole/go-ole**
   - **選定理由**: Windows 環境において Excel および PowerPoint を COM (Component Object Model) 経由で直接操作するために採用。Fit-to-Page PDF 化や高精度スライド画像化を実現。
 - **saintfish/chardet**
   - **選定理由**: テキストファイルや CSV のエンコーディング判定を行う純 Go ライブラリ。
-- **google.golang.org/genai**
-  - **選定理由**: PageIndex インデックス構築時のサマリー生成において、Google Gemini API を利用するための公式 Go SDK。
 
 ## テストツール
 - **testing** (Go 標準パッケージ): 単体テストおよび結合テストの基本フレームワーク。

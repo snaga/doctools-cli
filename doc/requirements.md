@@ -67,6 +67,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - 要件 PPTX-03: PowerPoint スライド画像化 (`doctools-cli pptx extract-images`)
   - EARS 受け入れ基準: ［Event-driven / State-driven］ Windows 環境かつ PowerPoint がインストールされている状態で画像化が要求されたとき、`go-ole` を用いて指定スライドを直接 PNG 画像としてエクスポートし、パス一覧を返さなければならない。
   - EARS 受け入れ基準: ［Unwanted-behavior］ 存在しないスライド番号が指定されたとき、システムは有効範囲外エラーを出力しなければならない。
+  - EARS 受け入れ基準: ［Unwanted-behavior］ 非 Windows 環境または Microsoft PowerPoint がインストールされていない環境で実行されたとき、システムは環境非適合エラーを出力し非ゼロ終了コードで終了しなければならない。
 
 ### 要件カテゴリ: PDF操作 (PDF)
 - 要件 PDF-01: PDF テキスト抽出 (`doctools-cli pdf extract-text`)
@@ -114,10 +115,10 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
     - ［Event-driven］ 隠しディレクトリ（`.` で始まるディレクトリ）であっても、`--include-dir` に明示的に指定されている場合は、システムはそのディレクトリの走査を許可しなければならない。
 
 ### 要件カテゴリ: 構造RAG (PAGEINDEX)
-- 要件 PAGEINDEX-01: PageIndex 構造サマリーインデックス構築 (`doctools-cli pageindex build`)
-  - ユーザーストーリー: AI エージェントとして、ドキュメントの階層構造サマリーインデックスを構築したい。
-  - EARS 受け入れ基準: ［Event-driven］ 対象ディレクトリが指定されたとき、システムはドキュメントの構造メタデータを解析し、PageIndex 互換 JSON として保存しなければならない。
-  - EARS 受け入れ基準: ［Unwanted-behavior］ LLM サマリー生成オプション使用時に `GEMINI_API_KEY` 環境変数が未設定の場合、システムは構造メタデータのみのフォールバック生成を行い、警告を出力しなければならない。
+- 要件 PAGEINDEX-01: PageIndex 決定論的構造インデックス管理 (`doctools-cli pageindex tree/content`)
+  - ユーザーストーリー: AI エージェントとして、ドキュメントの目次や章節からなる決定論的な階層構造ツリーを探索したい。
+  - EARS 受け入れ基準: ［Event-driven］ 対象ドキュメントパスが指定されたとき、システムは完全ローカルかつ決定論的に構造ツリーを解析・探索可能にしなければならない。
+  - EARS 受け入れ基準: ［State-driven］ 外部 LLM API キー（GEMINI_API_KEY等）やネットワーク接続が存在しないオフライン環境であっても、システムはゼロコンフィグで構造ツリー探索を提供しなければならない（ADR-0010 準拠）。
 - 要件 PAGEINDEX-02: 目次・階層構造探索 (`doctools-cli pageindex tree`)
   - EARS 受け入れ基準: ［Event-driven］ ドキュメントパスおよびノード ID（任意）、深さ（depth）が指定されたとき、階層ツリー構造を JSON で返さなければならない。
 - 要件 PAGEINDEX-03: ノードコンテンツピンポイント抽出 (`doctools-cli pageindex content`)
@@ -143,6 +144,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
   - EARS 受け入れ基準: ［Event-driven］ 有効なテキストファイルパスが指定されたとき、システムは文字コード判定結果を出力し、変換先エンコーディング（`--encoding`）が指定されたときは変換後ファイルを生成してパスを返さなければならない。
 - 要件 TEXT-04: クリップボードテキストコピー (`doctools-cli text copy-clipboard`)
   - EARS 受け入れ基準: ［Event-driven］ 入力テキスト文字列が指定されたとき、システムは Windows クリップボードにテキストを設定し、完了ステータスを返さなければならない。
+  - EARS 受け入れ基準: ［Unwanted-behavior］ クリップボードが利用できない環境またはアクセスに失敗したとき、システムはエラーを出力し非ゼロ終了コードで終了しなければならない。
 
 ### 要件カテゴリ: HTML操作 (HTML)
 - 要件 HTML-01: HTML テキスト抽出 (`doctools-cli html extract-text`)
@@ -190,7 +192,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - 要件 MCP-05: Smart Dynamic Capture (`command: "capture"`)
   - ユーザーストーリー: AI エージェントとして、PDF や PowerPoint、Excel の特定ページやスライド、シートを高解像度画像としてキャプチャし、マルチモーダル視覚推論に活用したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `command: "capture"` と有効な `file_path`（PDF/PPTX/Excel）が指定されたとき、システムはプリンタ記法（例: `"1"`, `"2-4"`, `"2,5,8"`）に従って指定ページ群を高解像度画像（デフォルト: 150dpi PNG）としてラスタライズし、ローカルファイル（既定: `.tmp/{base}_page_{num}.png`）に保存しなければならない。
+    - ［Event-driven］ `command: "capture"` と有効な `file_path`（PDF/PPTX/Excel: `.pdf`, `.pptx`, `.xlsx`, `.xlsm`）が指定されたとき、システムはプリンタ記法（例: `"1"`, `"2-4"`, `"2,5,8"`）に従って指定ページ群を高解像度画像（デフォルト: 150dpi PNG）としてラスタライズし、ローカルファイル（既定: `.tmp/{base}_page_{num}.png`）に保存しなければならない。
     - ［Event-driven］ キャプチャ結果が単一ページ（1枚）かつ `options.inline != false` のとき、システムはファイル保存パス情報に加えて MCP ImageContent（Base64 形式）をレスポンスに含めてインライン返却しなければならない。
     - ［Event-driven］ キャプチャ結果が複数ページ（2枚以上）のとき、システムはコンテキスト保護のため ImageContent を含めず、全生成画像ファイルパスの一覧およびメタデータ（解像度・ファイルサイズ）のみを返却しなければならない。
     - ［Unwanted-behavior］ テキスト・CSV・HTML などの画像化非対応形式が指定されたとき、システムはステータス error と画像化非対応である旨のエラーメッセージを返却しなければならない。

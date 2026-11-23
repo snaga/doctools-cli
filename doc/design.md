@@ -54,7 +54,7 @@
 | 全文検索 (FTS) | FTS-F04 | fts build --include-ext | 対象拡張子の包含・除外フィルター | FTS-04 |
 | 全文検索 (FTS) | FTS-F05 | fts query (Self-Describing) | AI エージェント向けクエリ構文・フィールド定義の自己説明 | FTS-05 |
 | 全文検索 (FTS) | FTS-F06 | fts build (--include-dir / --exclude-dir) | 隠しディレクトリのデフォルト除外 & ディレクトリ包含/除外フィルター | FTS-06 |
-| 構造RAG | PAGEINDEX-F01 | pageindex build | LLM サマリー付き構造 PageIndex インデックスの生成 | PAGEINDEX-01 |
+| 構造RAG | PAGEINDEX-F01 | pageindex tree / content | 決定論的構造 PageIndex ツリー探索およびピンポイント抽出 (ADR-0010) | PAGEINDEX-01 |
 | 構造RAG | PAGEINDEX-F02 | pageindex tree | 目次・ツリー構造の段階的取得 | PAGEINDEX-02 |
 | 構造RAG | PAGEINDEX-F03 | pageindex content | 特定ノード / ページ / シートのフルテキストピンポイント抽出 | PAGEINDEX-03 |
 | CSV操作 | CSV-F01 | csv read-cells | 指定した行・列範囲のセル値を JSON 配列取得 | CSV-01 |
@@ -206,7 +206,7 @@ graph TD
         PkgCLI --> UtilSvc["pkg/util"]
         PkgCLI --> VersionPkg["internal/version"]
 
-        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & HTMLSvc
+        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & HTMLSvc & CSVSvc & TextSvc
         
         ExcelSvc --> ModelsPkg["pkg/models"]
         PPTXSvc --> ModelsPkg
@@ -224,7 +224,6 @@ graph TD
         PDFSvc --> MuPDF["MuPDF CGO Static Lib"]
         FTSSvc --> MuPDF
         FTSSvc --> Bleve["Bleve Search Engine"]
-        PISvc --> GenAI["google.golang.org/genai"]
         CSVSvc & TextSvc --> Chardet["saintfish/chardet"]
     end
     
@@ -266,7 +265,7 @@ flowchart TD
     end
 
     CLI --> FTS & PI & EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION & MCP
-    MCP --> EXCEL & PDF & PPTX & HTML
+    MCP --> EXCEL & PDF & PPTX & HTML & CSV & TEXT
     FTS --> EXCEL & PPTX & PDF & CSV & TEXT & HTML
     PI --> PDF & PPTX & EXCEL
     EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL --> MODELS
@@ -352,70 +351,70 @@ flowchart TD
     - Input: `index-path` (string), `query` (string), `--limit` (int)
     - Processing: Bleve ハイライター/フラグメンターによる前後スニペットと AI ナビゲーション付与
     - Output: `{"total_hits": 5, "hits": [{"score": 1.452, "snippet": "...", "source": {...}, "target": {...}}]}`
-19. **`doctools-cli pageindex build <dir>`**
-    - Input: `dir` (string), `--output` (string)
-    - Processing: ドキュメントの階層構造メタデータ解析および JSON 保存
-    - Output: `{"index_file": ".../pageindex.json"}`
-20. **`doctools-cli pageindex tree <file>`**
+19. **`doctools-cli pageindex tree <file>`**
     - Input: `file` (string), `--node-id` (string), `--depth` (int)
-    - Processing: 目次ツリーの部分切り出し
-    - Output: `{"structure": [...]}`
-21. **`doctools-cli pageindex content <file>`**
+    - Processing: 目次ツリーの取得・階層切り出し
+    - Output: `{"nodes": [...]}`
+20. **`doctools-cli pageindex content <file>`**
     - Input: `file` (string), `--node-id` (string)
     - Processing: ノード ID に紐づく本文抽出
     - Output: `{"content": "..."}`
-22. **`doctools-cli csv read-cells <file>`**
-    - Input: `file` (string), `--start-row` (int), `--end-row` (int), `--columns` (string)
+21. **`doctools-cli csv read-cells <file>`**
+    - Input: `file` (string), `--start-row` (int), `--end-row` (int), `--columns` ([]int), `--header-row` (int)
     - Processing: `encoding/csv` ストリーム読み込み
     - Output: `{"data": [[...]]}`
-23. **`doctools-cli csv search <file> <query>`**
+22. **`doctools-cli csv search <file> <query>`**
     - Input: `file` (string), `query` (string)
     - Processing: キーワード一致セル検索
     - Output: `{"results": [{"row": 5, "col": 2, "value": "..."}]}`
-24. **`doctools-cli csv metadata <file>`**
+23. **`doctools-cli csv metadata <file>`**
     - Input: `file` (string)
     - Processing: `chardet` エンコーディング判定と行列数取得
     - Output: `{"encoding": "Shift_JIS", "total_rows": 100, "max_columns": 10}`
-25. **`doctools-cli csv extract <file>`**
+24. **`doctools-cli csv extract <file>`**
     - Input: `file` (string), `--output` (string), `--start-row` (int), `--end-row` (int)
     - Processing: 指定領域の別 CSV 保存
     - Output: `{"output_path": ".../subset.csv"}`
-26. **`doctools-cli text head <file>`** / **`text tail <file>`**
+25. **`doctools-cli text head <file>`** / **`text tail <file>`**
     - Input: `file` (string), `--lines` (int)
     - Processing: ファイル先頭・末尾行取得
     - Output: `{"lines": ["..."]}`
-27. **`doctools-cli text grep <file> <pattern>`**
+26. **`doctools-cli text grep <file> <pattern>`**
     - Input: `file` (string), `pattern` (string)
     - Processing: 正規表現一致行の抽出
     - Output: `{"matches": [{"line": 10, "text": "..."}]}`
-28. **`doctools-cli text metadata <file>`** / **`text convert <file>`**
-    - Input: `file` (string), `--encoding` (string)
+27. **`doctools-cli text metadata <file>`** / **`text convert <file>`**
+    - Input: `file` (string), `--encoding` (string), `--output` (string)
     - Processing: `chardet` 判定および相互変換
     - Output: `{"encoding": "UTF-8", "output_path": "..."}`
-29. **`doctools-cli text copy-clipboard <text>`**
+28. **`doctools-cli text copy-clipboard <text>`**
     - Input: `text` (string)
     - Processing: Windows API クリップボード書き込み
     - Output: `{"message": "Copied"}`
-30. **`doctools-cli html extract-text <file>`**
+29. **`doctools-cli html extract-text <file>`**
     - Input: `file` (string), `--output` (string)
     - Processing: HTML パースと Markdown 変換
     - Output: `{"output_path": ".../page.md"}`
-31. **`doctools-cli image metadata <file>`**
+30. **`doctools-cli image metadata <file>`**
     - Input: `file` (string)
     - Processing: 画像ヘッダ解析による幅・高さ取得
-    - Output: `{"width": 1920, "height": 1080}`
-32. **`doctools-cli image crop <file>`**
-    - Input: `file` (string), `--left` (int), `--top` (int), `--right` (int), `--bottom` (int)
-    - Processing: 指定矩形領域のクロップ保存
+    - Output: `{"width": 1920, "height": 1080, "format": "png"}`
+31. **`doctools-cli image crop <file>`**
+    - Input: `file` (string), `--output` (string), `--left` (int), `--top` (int), `--right` (int), `--bottom` (int)
+    - Processing: 指定矩形領域の境界検証およびクロップ保存
     - Output: `{"output_path": ".../crop.png"}`
-33. **`doctools-cli image save-clipboard`**
+32. **`doctools-cli image save-clipboard`**
     - Input: `--output` (string)
     - Processing: クリップボード画像取得と PNG 保存
     - Output: `{"output_path": ".../clip.png"}`
-34. **`doctools-cli util zip <files...>`** / **`util unzip <file>`**
-    - Input: `files` ([]string) / `file` (string), `--output` (string)
-    - Processing: `archive/zip` 圧縮および解凍
+33. **`doctools-cli util zip <files...>`**
+    - Input: `files` ([]string), `--output` (string)
+    - Processing: `archive/zip` によるファイル・ディレクトリ圧縮
     - Output: `{"output_path": "..."}`
+34. **`doctools-cli util unzip <file>`**
+    - Input: `file` (string), `--output-dir` (string)
+    - Processing: `archive/zip` による Zip Slip ガード付き安全解凍
+    - Output: `{"output_dir": "..."}`
 35. **`doctools-cli mcp`**
     - Input: stdio (JSON-RPC 2.0 messages)
     - Processing: stdio 経由での Model Context Protocol サーバー起動およびリクエスト処理
@@ -544,6 +543,8 @@ graph LR
     MCPSvc --> PPTXSvc["pkg/pptx"]
     MCPSvc --> PDFSvc["pkg/pdf"]
     MCPSvc --> HTMLSvc["pkg/html"]
+    MCPSvc --> CSVSvc["pkg/csv"]
+    MCPSvc --> TextSvc["pkg/text"]
 
     ExcelCmd --> ExcelSvc
     PPTXCmd --> PPTXSvc
@@ -581,7 +582,7 @@ graph LR
 | `pkg/pdf` | `ExtractPages(inputPath, outputDir, dpi, format, startPage, endPage, force)` | PDFパス, 出力フォルダ, DPI, フォーマット, 開始/終了ページ, 上書きフラグ | `go-fitz` (MuPDF) による全画面ページ描画と保存 | レンダリング情報と生成画像パス一覧 |
 | `pkg/fts` | `BuildIndex(dirPath, timeout, force)` | ディレクトリパス, タイムアウト時間, 上書きフラグ | 各形式パーサーで On-the-fly テキスト化（PDFは `go-fitz` 高精度抽出）・`mtime` 差分比較・`context.WithTimeout` 制御を行い Bleve 書き込み | 処理ファイル件数・スキップ件数・タイムアウト件数・チャンク件数・処理時間 |
 | `pkg/fts` | `QueryIndex(query, limit)` | 検索文字列, 件数 | Bleve ハイライトスニペット生成および構造化 JSON (source/target) 出力 | ヒットスコア・ハイライトスニペット・AI位置ナビゲーション構造一覧 |
-| `pkg/pageindex` | `BuildSummaryTree(dir)` | ディレクトリパス | 構造解析と PageIndex JSON 生成 | `pageindex.json` パス |
+| `pkg/pageindex` | `GetTree(path, nodeID, depth)` | ファイルパス, ノードID, 探索深さ | 目次・ツリー構造の段階的取得 | ノード配列 |
 | `pkg/csv` | `DetectEncoding(path)` | CSV/Textパス | `saintfish/chardet` による文字コード自動判定 | エンコーディング名 |
 | `pkg/text` | `GrepFile(path, pattern)` | Textパス, 正規表現 | ストリーム行走査と正規表現マッチング | マッチ行番号・テキスト一覧 |
 | `pkg/html` | `ExtractText(path)` | HTMLパス | HTML要素パースと Markdown テキスト変換 | Markdown ファイルパス |

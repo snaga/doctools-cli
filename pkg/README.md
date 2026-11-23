@@ -9,8 +9,9 @@
 
 ```mermaid
 flowchart TD
-    subgraph Presentation ["プレゼンテーション層 (CLI)"]
+    subgraph Presentation ["プレゼンテーション層 (CLI & MCP)"]
         CLI["pkg/cli (Cobra コマンドルーティング & agent-context)"]
+        MCP["pkg/mcp (stdio MCP サーバー & doctools_run)"]
     end
 
     subgraph Orchestration ["オーケストレーション・高度探索層"]
@@ -73,6 +74,7 @@ flowchart TD
 | パッケージ | ディレクトリ README | 主な責務・技術選定 |
 |:---|:---|:---|
 | **`pkg/cli`** | [`pkg/cli/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/cli/README.md) | Cobra コマンドルーティング、引数検証、Layer 2 Introspection (`agent-context`) |
+| **`pkg/mcp`** | [`pkg/mcp/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/mcp/README.md) | stdio JSON-RPC 2.0 MCP サーバー、`doctools_run` 統合ディスパッチャ、Smart Dynamic Response / Capture |
 | **`pkg/fts`** | [`pkg/fts/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/fts/README.md) | Pure Go `Bleve` 全文検索、On-the-fly チャンク化、隠しフォルダ高速枝刈り |
 | **`pkg/pageindex`** | [`pkg/pageindex/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pageindex/README.md) | 階層構造 RAG、Progressive Disclosure（段階的深さ探索）、ピンポイント抽出 |
 | **`pkg/excel`** | [`pkg/excel/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/excel/README.md) | `excelize` による CSV/Markdown 抽出、セル差分 (Diff)、安全パッチ (Patch)、`go-ole` 画像化 |

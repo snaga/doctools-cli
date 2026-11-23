@@ -36,8 +36,7 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
   - **Layer 2 (`doctools-cli agent-context`)**: 全コマンドの構造・型・引数スキーマを記述した機械判読可能な JSON 出力。
   - **Layer 3 (`SKILL.md`)**: エージェント向けコンパニオンスキル。
 - **PageIndex (推論ベースRAG支援)**:
-  - **Structure Extraction & Node Retrieval**: ドキュメント構造解析およびピンポイント取得。
-  - **LLM Summary Generation**: 公式 Google GenAI SDK (`google.golang.org/genai`) を用いたサマリー構築。
+  - **Structure Extraction & Node Retrieval**: ドキュメント構造解析およびピンポイント取得（完全ローカル・決定論的探索）。
 - **Search (全文検索)**:
   - **Bleve Search Engine**: 各種ドキュメント (Excel, PPT, PDF, CSV, Text) を On-the-fly で Markdown/CSV テキストへ変換・チャンク分割し、ファイルパスやシート名・ページ番号などのメタデータ付きでインデックス登録。スコア、前後ハイライトスニペット、AI向けナビゲーション構造 (`target`) を返却する爆速全文検索。
 
