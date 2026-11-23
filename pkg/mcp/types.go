@@ -176,8 +176,10 @@ type CallToolParams struct {
 
 // ToolContent represents a content chunk in a tool call result.
 type ToolContent struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
 }
 
 // CallToolResult represents the result of "tools/call".
@@ -284,6 +286,17 @@ type DoctoolsRunOptions struct {
 	Slides         string `json:"slides,omitempty"`
 	MaxInlineChars int    `json:"max_inline_chars,omitempty"`
 	OutputPath     string `json:"output_path,omitempty"`
+	DPI            int    `json:"dpi,omitempty"`
+	Inline         *bool  `json:"inline,omitempty"`
+}
+
+// CapturedImage represents metadata of a captured page or slide image.
+type CapturedImage struct {
+	PageNumber int    `json:"page_number"`
+	FilePath   string `json:"file_path"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	FileSize   int64  `json:"file_size"`
 }
 
 // DoctoolsRunParams represents arguments passed to doctools_run.
@@ -296,12 +309,15 @@ type DoctoolsRunParams struct {
 
 // DoctoolsRunResult represents the unified execution result of doctools_run.
 type DoctoolsRunResult struct {
-	Status     string `json:"status"` // "success", "saved_to_file", "error"
-	Content    string `json:"content,omitempty"`
-	FilePath   string `json:"file_path,omitempty"`
-	TotalPages int    `json:"total_pages,omitempty"`
-	CharCount  int    `json:"char_count,omitempty"`
-	Message    string `json:"message,omitempty"`
+	Status      string          `json:"status"` // "success", "saved_to_file", "error"
+	Content     string          `json:"content,omitempty"`
+	FilePath    string          `json:"file_path,omitempty"`
+	TotalPages  int             `json:"total_pages,omitempty"`
+	CharCount   int             `json:"char_count,omitempty"`
+	Message     string          `json:"message,omitempty"`
+	Images      []CapturedImage `json:"images,omitempty"`
+	ImageBase64 string          `json:"image_base64,omitempty"`
+	ImageMIME   string          `json:"image_mime,omitempty"`
 }
 
 // ToCallToolResult converts a DoctoolsRunResult into standard MCP CallToolResult.
