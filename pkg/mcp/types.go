@@ -199,8 +199,8 @@ func DefaultTools() []Tool {
 				Properties: map[string]PropertyDef{
 					"command": {
 						Type:        "string",
-						Enum:        []string{"read", "search"},
-						Description: "'read' extracts text/tables from the document; 'search' queries keywords within the specific document",
+						Enum:        []string{"read", "search", "capture"},
+						Description: "'read' extracts text/tables from the document; 'search' queries keywords within the specific document; 'capture' renders document pages as PNG images",
 					},
 					"file_path": {
 						Type:        "string",
@@ -232,6 +232,14 @@ func DefaultTools() []Tool {
 							"output_path": {
 								Type:        "string",
 								Description: "Explicit output path when saving to file",
+							},
+							"dpi": {
+								Type:        "integer",
+								Description: "DPI resolution for capture (default: 150)",
+							},
+							"inline": {
+								Type:        "boolean",
+								Description: "Whether to inline base64 image data when capturing a single page (default: true)",
 							},
 						},
 					},
@@ -323,13 +331,21 @@ type DoctoolsRunResult struct {
 // ToCallToolResult converts a DoctoolsRunResult into standard MCP CallToolResult.
 func (r *DoctoolsRunResult) ToCallToolResult() *CallToolResult {
 	data, _ := json.Marshal(r)
-	return &CallToolResult{
-		Content: []ToolContent{
-			{
-				Type: "text",
-				Text: string(data),
-			},
+	content := []ToolContent{
+		{
+			Type: "text",
+			Text: string(data),
 		},
+	}
+	if r.ImageBase64 != "" {
+		content = append(content, ToolContent{
+			Type:     "image",
+			Data:     r.ImageBase64,
+			MIMEType: r.ImageMIME,
+		})
+	}
+	return &CallToolResult{
+		Content: content,
 		IsError: r.Status == "error",
 	}
 }

@@ -18,9 +18,10 @@ type SearchHandlerFunc func(ctx context.Context, format FileFormat, params Docto
 
 // Dispatcher coordinates doctools_run execution by detecting format and routing to handlers.
 type Dispatcher struct {
-	mu             sync.RWMutex
-	readHandlers   map[FileFormat]ReadHandlerFunc
-	searchHandlers map[FileFormat]SearchHandlerFunc
+	mu              sync.RWMutex
+	readHandlers    map[FileFormat]ReadHandlerFunc
+	searchHandlers  map[FileFormat]SearchHandlerFunc
+	captureHandlers map[FileFormat]CaptureHandlerFunc
 }
 
 var (
@@ -41,14 +42,16 @@ func HandleDoctoolsRun(ctx context.Context, params DoctoolsRunParams) (*Doctools
 	return DefaultDispatcher().Handle(ctx, params)
 }
 
-// NewDispatcher creates a new Dispatcher with default read and search handlers registered.
+// NewDispatcher creates a new Dispatcher with default read, search, and capture handlers registered.
 func NewDispatcher() *Dispatcher {
 	d := &Dispatcher{
-		readHandlers:   make(map[FileFormat]ReadHandlerFunc),
-		searchHandlers: make(map[FileFormat]SearchHandlerFunc),
+		readHandlers:    make(map[FileFormat]ReadHandlerFunc),
+		searchHandlers:  make(map[FileFormat]SearchHandlerFunc),
+		captureHandlers: make(map[FileFormat]CaptureHandlerFunc),
 	}
 	RegisterDefaultReadHandlers(d)
 	RegisterDefaultSearchHandlers(d)
+	RegisterDefaultCaptureHandlers(d)
 	return d
 }
 
@@ -64,6 +67,13 @@ func (d *Dispatcher) RegisterSearchHandler(format FileFormat, h SearchHandlerFun
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.searchHandlers[format] = h
+}
+
+// RegisterCaptureHandler registers a custom capture handler for a file format.
+func (d *Dispatcher) RegisterCaptureHandler(format FileFormat, h CaptureHandlerFunc) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.captureHandlers[format] = h
 }
 
 // Handle validates parameters, detects format, and executes the appropriate handler.
@@ -101,11 +111,11 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 	}
 
 	cmd := strings.ToLower(strings.TrimSpace(params.Command))
-	if cmd != "read" && cmd != "search" {
+	if cmd != "read" && cmd != "search" && cmd != "capture" {
 		return &DoctoolsRunResult{
 			Status:   "error",
 			FilePath: trimmedPath,
-			Message:  fmt.Sprintf("invalid command %q: must be 'read' or 'search'", params.Command),
+			Message:  fmt.Sprintf("invalid command %q: must be 'read', 'search' or 'capture'", params.Command),
 		}, nil
 	}
 
@@ -118,6 +128,12 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 	}
 
 	format := DetectFormat(trimmedPath)
+	if cmd == "capture" {
+		if format != FormatPDF && format != FormatPPTX && format != FormatExcel {
+			return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
+		}
+	}
+
 	supportedFormatsMsg := "Supported formats: PDF (.pdf), Excel (.xlsx, .xlsm), PowerPoint (.pptx), CSV (.csv), Text (.txt, .md, .markdown, .json, .yaml, .yml), HTML (.html, .htm)"
 	if format == FormatUnknown {
 		return &DoctoolsRunResult{
@@ -148,11 +164,13 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 		return d.dispatchRead(ctx, format, params)
 	case "search":
 		return d.dispatchSearch(ctx, format, params)
+	case "capture":
+		return d.dispatchCapture(ctx, format, params)
 	default:
 		return &DoctoolsRunResult{
 			Status:   "error",
 			FilePath: trimmedPath,
-			Message:  fmt.Sprintf("invalid command %q: must be 'read' or 'search'", params.Command),
+			Message:  fmt.Sprintf("invalid command %q: must be 'read', 'search' or 'capture'", params.Command),
 		}, nil
 	}
 }
@@ -194,6 +212,18 @@ func (d *Dispatcher) dispatchSearch(ctx context.Context, format FileFormat, para
 		FilePath: params.FilePath,
 		Message:  "document search placeholder",
 	}, nil
+}
+
+func (d *Dispatcher) dispatchCapture(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
+	d.mu.RLock()
+	handler, ok := d.captureHandlers[format]
+	d.mu.RUnlock()
+
+	if ok && handler != nil {
+		return handler(ctx, format, params)
+	}
+
+	return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
 }
 
 // HandleToolCall bridges JSON-RPC tools/call requests to doctools_run dispatcher.

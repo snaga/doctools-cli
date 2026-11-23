@@ -349,3 +349,255 @@ func TestDispatcher_HandleToolCall(t *testing.T) {
 		}
 	})
 }
+
+func createTestPDFForCapture(t *testing.T, path string) {
+	t.Helper()
+	body := "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Length 44 >>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(Hello MCP Capture) Tj\nET\nendstream\nendobj\n"
+
+	header := "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
+	o1 := len(header)
+	o2 := o1 + len("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	o3 := o2 + len("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	o4 := o3 + len("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n")
+	o5 := o4 + len("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+
+	xrefOffset := len(header) + len(body)
+	xref := "xref\n0 6\n0000000000 65535 f \n" +
+		fmt.Sprintf("%010d 00000 n \n", o1) +
+		fmt.Sprintf("%010d 00000 n \n", o2) +
+		fmt.Sprintf("%010d 00000 n \n", o3) +
+		fmt.Sprintf("%010d 00000 n \n", o4) +
+		fmt.Sprintf("%010d 00000 n \n", o5)
+	trailer := fmt.Sprintf("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOffset)
+
+	fullPDF := []byte(header + body + xref + trailer)
+	if err := os.WriteFile(path, fullPDF, 0644); err != nil {
+		t.Fatalf("failed to write test pdf: %v", err)
+	}
+}
+
+func TestDispatcher_Capture(t *testing.T) {
+	tempDir := t.TempDir()
+	pdfPath := filepath.Join(tempDir, "sample.pdf")
+	createTestPDFForCapture(t, pdfPath)
+
+	outDir := filepath.Join(tempDir, "out_capture")
+	d := mcp.NewDispatcher()
+	ctx := context.Background()
+
+	t.Run("single page capture inline base64 and HandleToolCall", func(t *testing.T) {
+		params := mcp.DoctoolsRunParams{
+			Command:  "capture",
+			FilePath: pdfPath,
+			Options: &mcp.DoctoolsRunOptions{
+				Pages:      "1",
+				OutputPath: outDir,
+			},
+		}
+
+		res, err := d.Handle(ctx, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Errorf("expected status 'success', got %q", res.Status)
+		}
+		if res.ImageBase64 == "" {
+			t.Errorf("expected non-empty ImageBase64 for single page inline capture")
+		}
+		if res.ImageMIME != "image/png" {
+			t.Errorf("expected image/png MIME, got %q", res.ImageMIME)
+		}
+		if len(res.Images) != 1 {
+			t.Fatalf("expected 1 captured image, got %d", len(res.Images))
+		}
+		if !strings.Contains(res.Content, "Captured page 1") {
+			t.Errorf("expected content to mention Captured page 1, got %q", res.Content)
+		}
+
+		// HandleToolCall verification
+		argsJSON, _ := json.Marshal(params)
+		callRes, err := d.HandleToolCall(ctx, "doctools_run", argsJSON)
+		if err != nil {
+			t.Fatalf("HandleToolCall failed: %v", err)
+		}
+		if callRes.IsError {
+			t.Errorf("expected IsError=false")
+		}
+
+		var hasImageContent bool
+		var imageContent mcp.ToolContent
+		for _, c := range callRes.Content {
+			if c.Type == "image" {
+				hasImageContent = true
+				imageContent = c
+			}
+		}
+		if !hasImageContent {
+			t.Fatalf("expected CallToolResult to contain ToolContent with type 'image'")
+		}
+		if imageContent.Data != res.ImageBase64 {
+			t.Errorf("expected image content data to match ImageBase64")
+		}
+		if imageContent.MIMEType != "image/png" {
+			t.Errorf("expected image MIMEType 'image/png', got %q", imageContent.MIMEType)
+		}
+	})
+
+	t.Run("multi-page capture saved to file", func(t *testing.T) {
+		// Mock capture handler returning 2 images to simulate multi-page
+		multiD := mcp.NewDispatcher()
+		dummyImg1 := filepath.Join(tempDir, "page_1.png")
+		dummyImg2 := filepath.Join(tempDir, "page_2.png")
+		_ = os.WriteFile(dummyImg1, []byte("png1"), 0644)
+		_ = os.WriteFile(dummyImg2, []byte("png2"), 0644)
+
+		multiD.RegisterCaptureHandler(mcp.FormatPDF, func(ctx context.Context, format mcp.FileFormat, params mcp.DoctoolsRunParams) (*mcp.DoctoolsRunResult, error) {
+			imgs := []mcp.CapturedImage{
+				{PageNumber: 1, FilePath: dummyImg1, Width: 100, Height: 100, FileSize: 4},
+				{PageNumber: 2, FilePath: dummyImg2, Width: 100, Height: 100, FileSize: 4},
+			}
+			return &mcp.DoctoolsRunResult{
+				Status:      "saved_to_file",
+				Content:     "Captured 2 pages to directory",
+				FilePath:    outDir,
+				TotalPages:  2,
+				Images:      imgs,
+				ImageBase64: "",
+			}, nil
+		})
+
+		params := mcp.DoctoolsRunParams{
+			Command:  "capture",
+			FilePath: pdfPath,
+			Options: &mcp.DoctoolsRunOptions{
+				Pages:      "1-2",
+				OutputPath: outDir,
+			},
+		}
+
+		res, err := multiD.Handle(ctx, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "saved_to_file" {
+			t.Errorf("expected status 'saved_to_file', got %q", res.Status)
+		}
+		if res.ImageBase64 != "" {
+			t.Errorf("expected empty ImageBase64 for multi-page, got %q", res.ImageBase64)
+		}
+
+		// Tool call verification
+		argsJSON, _ := json.Marshal(params)
+		callRes, err := multiD.HandleToolCall(ctx, "doctools_run", argsJSON)
+		if err != nil {
+			t.Fatalf("HandleToolCall failed: %v", err)
+		}
+		for _, c := range callRes.Content {
+			if c.Type == "image" {
+				t.Errorf("did not expect 'image' content for multi-page result: %+v", c)
+			}
+		}
+	})
+
+	t.Run("inline false opt-out for single page", func(t *testing.T) {
+		inlineFalse := false
+		params := mcp.DoctoolsRunParams{
+			Command:  "capture",
+			FilePath: pdfPath,
+			Options: &mcp.DoctoolsRunOptions{
+				Pages:      "1",
+				OutputPath: outDir,
+				Inline:     &inlineFalse,
+			},
+		}
+
+		res, err := d.Handle(ctx, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "saved_to_file" {
+			t.Errorf("expected status 'saved_to_file', got %q", res.Status)
+		}
+		if res.ImageBase64 != "" {
+			t.Errorf("expected empty ImageBase64 when inline=false, got %q", res.ImageBase64)
+		}
+		if !strings.Contains(res.Content, "Captured 1 pages") {
+			t.Errorf("expected file listing content, got %q", res.Content)
+		}
+
+		argsJSON, _ := json.Marshal(params)
+		callRes, err := d.HandleToolCall(ctx, "doctools_run", argsJSON)
+		if err != nil {
+			t.Fatalf("HandleToolCall failed: %v", err)
+		}
+		for _, c := range callRes.Content {
+			if c.Type == "image" {
+				t.Errorf("did not expect 'image' content when inline=false")
+			}
+		}
+	})
+
+	t.Run("unsupported formats error", func(t *testing.T) {
+		unsupportedExts := []string{".csv", ".txt", ".docx"}
+		for _, ext := range unsupportedExts {
+			filePath := filepath.Join(tempDir, "dummy"+ext)
+			_ = os.WriteFile(filePath, []byte("sample"), 0644)
+
+			params := mcp.DoctoolsRunParams{
+				Command:  "capture",
+				FilePath: filePath,
+			}
+
+			_, err := d.Handle(ctx, params)
+			if err == nil {
+				t.Errorf("expected error for capture on unsupported format %s, got nil", ext)
+			} else if !strings.Contains(err.Error(), "capture is not supported for format") {
+				t.Errorf("expected error message to contain format support info, got %v", err)
+			}
+
+			argsJSON, _ := json.Marshal(params)
+			_, err = d.HandleToolCall(ctx, "doctools_run", argsJSON)
+			if err == nil {
+				t.Errorf("expected HandleToolCall error for unsupported format %s", ext)
+			}
+		}
+	})
+
+	t.Run("non-existent file", func(t *testing.T) {
+		nonExistent := filepath.Join(tempDir, "does_not_exist.pdf")
+		params := mcp.DoctoolsRunParams{
+			Command:  "capture",
+			FilePath: nonExistent,
+		}
+
+		res, err := d.Handle(ctx, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "file not found") {
+			t.Errorf("expected file not found error, got %+v", res)
+		}
+	})
+
+	t.Run("out of range pages error", func(t *testing.T) {
+		params := mcp.DoctoolsRunParams{
+			Command:  "capture",
+			FilePath: pdfPath,
+			Options: &mcp.DoctoolsRunOptions{
+				Pages: "99",
+			},
+		}
+
+		_, err := d.Handle(ctx, params)
+		if err == nil {
+			t.Errorf("expected error for out of range pages, got nil")
+		} else if !strings.Contains(err.Error(), "no valid pages in range") {
+			t.Errorf("expected 'no valid pages in range' error, got %v", err)
+		}
+	})
+}
