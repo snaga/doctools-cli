@@ -73,6 +73,7 @@ doctools-cli agent-context [--json]
 
 # Agent-Native stdio MCP サーバー (stdio JSON-RPC 2.0 & 統合ディスパッチャ doctools_run)
 doctools-cli mcp
+# ※単一Gateway "doctools_run" により read (抽出), search (検索), capture (画像化) を提供。
 
 # バージョン確認（--help の先頭にも表示されます）
 doctools-cli --version
@@ -148,8 +149,9 @@ doctools-cli agent-context --json
 
 ### 0.8.0 (Unreleased)
 - **Agent-Native stdio MCP サーバーの搭載 (`doctools-cli mcp`)**: AI エージェント（Claude Desktop, Cursor, Antigravity 等）の Tool 定義として 1 級市民で常駐可能な stdio JSON-RPC 2.0 サーバーを内蔵。
-- **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read` および `search` アクションを実行可能。
-- **Smart Dynamic Response (動的閾値ハンドリング)**: 抽出テキストが 4,000 文字以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とメタデータ（総ページ/シート数、文字数）を返却して LLM のコンテキストウィンドウ枯渇を防止。
+- **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read`、`search`、および `capture` アクションを実行可能。
+- **Smart Dynamic Response (動的テキスト閾値ハンドリング)**: 抽出テキストが 4,000 文字以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とメタデータ（総ページ/シート数、文字数）を返却して LLM のコンテキストウィンドウ枯渇を防止。
+- **Smart Dynamic Capture (動的画像キャプチャ制御)**: PDF, PPTX, Excel の指定ページ（プリンタ記法対応）を PNG 画像化。単一ページ抽出時は MCP `ImageContent` (Base64) を直接注入してエージェントの視覚推論器に提供し、複数ページ抽出時はファイル保存ハンドル一覧のみを返却してコンテキスト溢れを防止。
 - **単一ファイル内ピンポイント検索 (`command: search`)**: 指定した単一ファイル内からキーワード周辺のハイライトスニペットを抽出し、該当ページ番号やセル番地を高速取得。
 
 ### 0.7.1 (2026-10-05)
