@@ -130,7 +130,11 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 	format := DetectFormat(trimmedPath)
 	if cmd == "capture" {
 		if format != FormatPDF && format != FormatPPTX && format != FormatExcel {
-			return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: trimmedPath,
+				Message:  fmt.Sprintf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format),
+			}, nil
 		}
 	}
 
@@ -223,7 +227,11 @@ func (d *Dispatcher) dispatchCapture(ctx context.Context, format FileFormat, par
 		return handler(ctx, format, params)
 	}
 
-	return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
+	return &DoctoolsRunResult{
+		Status:   "error",
+		FilePath: params.FilePath,
+		Message:  fmt.Sprintf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format),
+	}, nil
 }
 
 // HandleToolCall bridges JSON-RPC tools/call requests to doctools_run dispatcher.

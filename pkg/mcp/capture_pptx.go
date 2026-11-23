@@ -48,6 +48,10 @@ func handleCapturePPTX(ctx context.Context, filePath string, pages []int, dpi in
 
 	results := make([]CapturedImage, 0, len(paths))
 	for idx, imgPath := range paths {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		pageNum := 0
 		if idx < len(pages) {
 			pageNum = pages[idx]

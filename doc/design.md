@@ -454,7 +454,6 @@ flowchart TD
           "sheet": { "type": "string", "description": "Sheet name for Excel" },
           "slides": { "type": "string", "description": "Slide numbers for PPTX" },
           "dpi": { "type": "integer", "description": "Resolution in DPI for capture (default: 150)" },
-          "format": { "type": "string", "enum": ["png", "jpg"], "description": "Image format for capture (default: 'png')" },
           "inline": { "type": "boolean", "description": "Whether to return inline base64 ImageContent for single-page capture (default: true)" },
           "max_inline_chars": { "type": "integer", "description": "Threshold for inline return (default: 4000)" },
           "output_path": { "type": "string", "description": "Explicit output path when saving to file" },
@@ -492,6 +491,7 @@ sequenceDiagram
         Dispatcher-->>MCP: ファイルハンドル返却
         MCP-->>Agent: {"status": "saved_to_file", "file_path": ".tmp/spec_extracted.md", "total_pages": 45, "char_count": 28000, "message": "Content exceeded threshold. Safely saved to file."}
     end
+```
 
 #### Smart Dynamic Capture 処理シーケンス
 
@@ -517,7 +517,6 @@ sequenceDiagram
         Dispatcher-->>MCP: ファイルハンドル一覧 (パス・解像度・容量)
         MCP-->>Agent: [Text: "Captured 3 pages:\n- .tmp/...page_1.png\n- .tmp/...page_2.png..."] (コンテキスト保護！)
     end
-```
 ```
 
 ---
@@ -567,7 +566,7 @@ graph LR
 | `pkg/mcp` | `ServeStdio()` | `os.Stdin`, `os.Stdout` | stdio 上で JSON-RPC 2.0 リクエストを処理・ディスパッチ | エラーまたは正常終了 |
 | `pkg/mcp` | `HandleDoctoolsRun(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | コマンド（`read`/`search`/`capture`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response/Capture 判定 | `(*DoctoolsRunResult, error)` |
 | `pkg/mcp` | `handleCapture(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | フォーマット判別（PDF/PPTX/Excel）、プリンタ記法パース、各形式レンダラー呼び出し、Smart Dynamic Capture 判定（単一ページBase64/複数ページパス一覧） | `(*DoctoolsRunResult, error)` |
-| `pkg/mcp` | `parsePageSelection(s, totalPages)` | 選択文字列 (例: `"1-3,5"`), 総ページ数 (int) | プリンタ記法の解析、範囲バリデーション、ソート・重複排除 | `([]int, error)` |
+| `pkg/mcp` | `parsePageSelection(s, totalPages)` | 選択文字列 (例: `"1-3,5"`), 総ページ数 (int) | プリンタ記法の解析、範囲バリデーション、ソート・重複排除 | `([]int, []int, error)` |
 | `pkg/excel` | `ExtractCSV(path, sheets)` | XLSXパス, シート名一覧 | `excelize` で各シート走査し CSV 書き出し | 生成 CSV パス一覧 |
 | `pkg/excel` | `ExtractImages(path, dpi)` | XLSXパス, DPI | `go-ole` で FitToPagesWide 適用し PDF エクスポート | 生成 PDF パス一覧 |
 | `pkg/pptx` | `ExtractText(path)` | PPTXパス | Zip+XML 解析によりスライドテキスト抽出 | Markdown ファイルパス |

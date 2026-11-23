@@ -32,9 +32,11 @@
   - **CLI モード**: サブプロセス起動によるオーバーヘッドゼロ・Unix パイプ・JSON 標準出力を活用する特注 CLI。
   - **stdio MCP サーバーモード**: エージェント環境の Tool Definition Block に常駐し、1 級市民として直接発火可能な Model Context Protocol (JSON-RPC 2.0 over stdio) サーバー。
 - **統合ディスパッチャ (Unified Dispatcher / Gateway)**:
-  - ツール乱立（Tool Overload）を抑止するため、単一の `doctools_run` エントリポイントから内部のアクション (`read`, `search`) およびファイル形式ハンドラへディスパッチ。
+  - ツール乱立（Tool Overload）を抑止するため、単一の `doctools_run` エントリポイントから内部のアクション (`read`, `search`, `capture`) およびファイル形式ハンドラへディスパッチ。
 - **Smart Dynamic Response (動的閾値ハンドリング)**:
   - 抽出結果の文字数・トークンサイズを計測し、閾値（デフォルト 4,000 文字 / 約 1,000 トークン、オプション指定可能）以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とハンドル返却に切り替えるハイブリッド機構。
+- **Smart Dynamic Capture (動的画像キャプチャ制御)**:
+  - ドキュメント（PDF/PPTX/Excel）の指定ページを PNG 画像化する際、単一ページ抽出（1枚）かつ `inline != false` の場合は MCP `ImageContent` (Base64) を直接注入してエージェントの視覚推論器に提供。複数ページ抽出（2枚以上）または `inline == false` の場合はファイル保存を行いハンドル一覧のみ返却してコンテキスト溢れを防止。また、`text` チャンクへの生 Base64 文字列の漏洩を型レベルで防止。
 - **Single Executable Binary**: すべての依存関係（MuPDF C 静的ライブラリ含む）を単一実行ファイル `doctools-cli.exe` に内蔵。
 - **3-Layer Introspection**: `--help` (L1), `doctools-cli agent-context` (L2), `SKILL.md` (L3) による多角的なエージェント誘導。
 - **Handle-based Data Access**: 大容量出力はローカルファイルパス（ハンドル）として返却。

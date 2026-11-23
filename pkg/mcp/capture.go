@@ -31,6 +31,21 @@ func RegisterDefaultCaptureHandlers(d *Dispatcher) {
 	d.RegisterCaptureHandler(FormatExcel, handleCapture)
 }
 
+// formatOfficeError formats errors from COM automation with helpful guidance if Office is unavailable.
+func formatOfficeError(err error, format FileFormat) string {
+	errStr := strings.ToLower(err.Error())
+	if strings.Contains(err.Error(), "COM export is only supported on Windows") ||
+		strings.Contains(errStr, "createobject") ||
+		strings.Contains(errStr, "coinitialize") ||
+		strings.Contains(errStr, "0x800401f3") ||
+		strings.Contains(errStr, "com object") ||
+		strings.Contains(errStr, "invalid class string") ||
+		strings.Contains(errStr, "com apartment") {
+		return fmt.Sprintf("Failed to capture %s: Microsoft Office is not installed or COM automation is unavailable in this environment. Note that PDF capture does not require Microsoft Office.", format)
+	}
+	return fmt.Sprintf("failed to capture %s: %v", format, err)
+}
+
 // handleCapture is the unified capture dispatch function for PDF, PowerPoint, and Excel.
 func handleCapture(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
 	var totalPages int
@@ -38,23 +53,39 @@ func handleCapture(ctx context.Context, format FileFormat, params DoctoolsRunPar
 	case FormatPDF:
 		count, err := pdfGetPageCount(params.FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get page count for %s: %w", params.FilePath, err)
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: params.FilePath,
+				Message:  fmt.Sprintf("failed to get page count for %s: %v", params.FilePath, err),
+			}, nil
 		}
 		totalPages = count
 	case FormatPPTX:
 		count, err := pptxGetSlideCount(params.FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get slide count for %s: %w", params.FilePath, err)
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: params.FilePath,
+				Message:  formatOfficeError(err, format),
+			}, nil
 		}
 		totalPages = count
 	case FormatExcel:
 		sheets, err := excelListSheets(params.FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list sheets for %s: %w", params.FilePath, err)
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: params.FilePath,
+				Message:  formatOfficeError(err, format),
+			}, nil
 		}
 		totalPages = len(sheets)
 	default:
-		return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  fmt.Sprintf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format),
+		}, nil
 	}
 
 	pagesStr := ""
@@ -68,12 +99,20 @@ func handleCapture(ctx context.Context, format FileFormat, params DoctoolsRunPar
 
 	pages, skipped, err := parsePageSelection(pagesStr, totalPages)
 	if err != nil {
-		return nil, err
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  err.Error(),
+		}, nil
 	}
 
 	outputDir := ".tmp"
-	if params.Options != nil && params.Options.OutputPath != "" {
-		outputDir = params.Options.OutputPath
+	if params.Options != nil {
+		if params.Options.OutputDir != "" {
+			outputDir = params.Options.OutputDir
+		} else if params.Options.OutputPath != "" {
+			outputDir = params.Options.OutputPath
+		}
 	}
 
 	dpi := 150
@@ -90,10 +129,22 @@ func handleCapture(ctx context.Context, format FileFormat, params DoctoolsRunPar
 	case FormatExcel:
 		images, err = captureExcel(ctx, params.FilePath, pages, dpi, outputDir)
 	default:
-		return nil, fmt.Errorf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format)
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  fmt.Sprintf("capture is not supported for format %q. Available formats for capture: PDF (.pdf), PowerPoint (.pptx), Excel (.xlsx, .xlsm, .xls)", format),
+		}, nil
 	}
 	if err != nil {
-		return nil, err
+		errMsg := err.Error()
+		if format == FormatPPTX || format == FormatExcel {
+			errMsg = formatOfficeError(err, format)
+		}
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  errMsg,
+		}, nil
 	}
 
 	inline := true
@@ -113,7 +164,11 @@ func handleCapture(ctx context.Context, format FileFormat, params DoctoolsRunPar
 		// Case A: Single page inline Base64 injection
 		data, err := os.ReadFile(images[0].FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read captured image %s: %w", images[0].FilePath, err)
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: params.FilePath,
+				Message:  fmt.Sprintf("failed to read captured image %s: %v", images[0].FilePath, err),
+			}, nil
 		}
 		base64Str := base64.StdEncoding.EncodeToString(data)
 		status = "success"

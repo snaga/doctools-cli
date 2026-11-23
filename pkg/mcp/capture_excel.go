@@ -68,14 +68,21 @@ func handleCaptureExcel(ctx context.Context, filePath string, pages []int, dpi i
 	if err != nil {
 		return nil, fmt.Errorf("failed to export excel sheets as PDF: %w", err)
 	}
+	// Ensure all generated temporary PDFs are cleaned up upon function exit
+	defer func() {
+		for _, p := range pdfPaths {
+			_ = os.Remove(p)
+		}
+	}()
 
-	// 4. 一時 PDF のクリーンアップ & PNG 変換
+	// 4. PNG 変換
 	results := make([]CapturedImage, 0, len(pdfPaths))
 	for i, pdfPath := range pdfPaths {
-		defer os.Remove(pdfPath)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 
 		pngPaths, err := pdf.ExtractPages(pdfPath, outputDir, dpi, "png", 1, 1, true)
-		os.Remove(pdfPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to rasterize sheet PDF %s: %w", pdfPath, err)
 		}

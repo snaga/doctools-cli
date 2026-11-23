@@ -429,6 +429,18 @@ func TestDispatcher_Capture(t *testing.T) {
 			t.Errorf("expected IsError=false")
 		}
 
+		// Verify Blocker-1 prevention: text content chunk MUST NOT contain Base64 data
+		for _, c := range callRes.Content {
+			if c.Type == "text" {
+				if strings.Contains(c.Text, "image_base64") {
+					t.Errorf("expected text content JSON NOT to include image_base64 field, but found it")
+				}
+				if strings.Contains(c.Text, res.ImageBase64) {
+					t.Errorf("expected text content JSON NOT to leak huge Base64 data into text chunk")
+				}
+			}
+		}
+
 		var hasImageContent bool
 		var imageContent mcp.ToolContent
 		for _, c := range callRes.Content {
@@ -553,17 +565,24 @@ func TestDispatcher_Capture(t *testing.T) {
 				FilePath: filePath,
 			}
 
-			_, err := d.Handle(ctx, params)
-			if err == nil {
-				t.Errorf("expected error for capture on unsupported format %s, got nil", ext)
-			} else if !strings.Contains(err.Error(), "capture is not supported for format") {
-				t.Errorf("expected error message to contain format support info, got %v", err)
+			res, err := d.Handle(ctx, params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.Status != "error" {
+				t.Errorf("expected status 'error' for unsupported format %s, got %q", ext, res.Status)
+			}
+			if !strings.Contains(res.Message, "capture is not supported for format") {
+				t.Errorf("expected error message to contain format support info, got %v", res.Message)
 			}
 
 			argsJSON, _ := json.Marshal(params)
-			_, err = d.HandleToolCall(ctx, "doctools_run", argsJSON)
-			if err == nil {
-				t.Errorf("expected HandleToolCall error for unsupported format %s", ext)
+			callRes, err := d.HandleToolCall(ctx, "doctools_run", argsJSON)
+			if err != nil {
+				t.Fatalf("unexpected error from HandleToolCall: %v", err)
+			}
+			if !callRes.IsError {
+				t.Errorf("expected IsError=true for unsupported format %s", ext)
 			}
 		}
 	})
@@ -593,11 +612,24 @@ func TestDispatcher_Capture(t *testing.T) {
 			},
 		}
 
-		_, err := d.Handle(ctx, params)
-		if err == nil {
-			t.Errorf("expected error for out of range pages, got nil")
-		} else if !strings.Contains(err.Error(), "no valid pages in range") {
-			t.Errorf("expected 'no valid pages in range' error, got %v", err)
+		res, err := d.Handle(ctx, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" {
+			t.Errorf("expected status 'error' for out of range pages, got %q", res.Status)
+		}
+		if !strings.Contains(res.Message, "no valid pages in range") {
+			t.Errorf("expected 'no valid pages in range' in message, got %v", res.Message)
+		}
+
+		argsJSON, _ := json.Marshal(params)
+		callRes, err := d.HandleToolCall(ctx, "doctools_run", argsJSON)
+		if err != nil {
+			t.Fatalf("unexpected error from HandleToolCall: %v", err)
+		}
+		if !callRes.IsError {
+			t.Errorf("expected IsError=true for out of range pages")
 		}
 	})
 }

@@ -73,6 +73,14 @@ func TestHandleCapture_PPTX(t *testing.T) {
 	if res.ImageBase64 == "" {
 		t.Errorf("expected non-empty ImageBase64 for single slide")
 	}
+
+	// Verify OutputDir takes precedence over OutputPath
+	params.Options.OutputDir = filepath.Join(tmpDir, "priority_dir")
+	params.Options.OutputPath = filepath.Join(tmpDir, "fallback_path")
+	_, _ = handleCapture(ctx, FormatPPTX, params)
+	if capturedOutputDir != filepath.Join(tmpDir, "priority_dir") {
+		t.Errorf("expected OutputDir %s to take precedence, got %s", filepath.Join(tmpDir, "priority_dir"), capturedOutputDir)
+	}
 }
 
 func TestHandleCapture_Excel(t *testing.T) {
@@ -170,9 +178,12 @@ func TestHandleCapture_Errors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("unsupported format error", func(t *testing.T) {
-		_, err := handleCapture(ctx, FormatCSV, DoctoolsRunParams{FilePath: "sample.csv"})
-		if err == nil || !strings.Contains(err.Error(), "capture is not supported for format") {
-			t.Errorf("expected unsupported format error, got %v", err)
+		res, err := handleCapture(ctx, FormatCSV, DoctoolsRunParams{FilePath: "sample.csv"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "capture is not supported for format") {
+			t.Errorf("expected unsupported format error, got %+v", res)
 		}
 	})
 
@@ -183,9 +194,12 @@ func TestHandleCapture_Errors(t *testing.T) {
 			return 0, errors.New("read pdf error")
 		}
 
-		_, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{FilePath: "bad.pdf"})
-		if err == nil || !strings.Contains(err.Error(), "failed to get page count") {
-			t.Errorf("expected pdf page count error, got %v", err)
+		res, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{FilePath: "bad.pdf"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "failed to get page count") {
+			t.Errorf("expected pdf page count error, got %+v", res)
 		}
 	})
 
@@ -196,9 +210,28 @@ func TestHandleCapture_Errors(t *testing.T) {
 			return 0, errors.New("read pptx error")
 		}
 
-		_, err := handleCapture(ctx, FormatPPTX, DoctoolsRunParams{FilePath: "bad.pptx"})
-		if err == nil || !strings.Contains(err.Error(), "failed to get slide count") {
-			t.Errorf("expected pptx slide count error, got %v", err)
+		res, err := handleCapture(ctx, FormatPPTX, DoctoolsRunParams{FilePath: "bad.pptx"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "read pptx error") {
+			t.Errorf("expected pptx slide count error, got %+v", res)
+		}
+	})
+
+	t.Run("pptx COM unavailable error guidance", func(t *testing.T) {
+		orig := pptxGetSlideCount
+		defer func() { pptxGetSlideCount = orig }()
+		pptxGetSlideCount = func(inputPath string) (int, error) {
+			return 0, errors.New("COM export is only supported on Windows")
+		}
+
+		res, err := handleCapture(ctx, FormatPPTX, DoctoolsRunParams{FilePath: "bad.pptx"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "Microsoft Office is not installed") {
+			t.Errorf("expected Office unavailable guidance, got %+v", res)
 		}
 	})
 
@@ -209,9 +242,12 @@ func TestHandleCapture_Errors(t *testing.T) {
 			return nil, errors.New("read excel error")
 		}
 
-		_, err := handleCapture(ctx, FormatExcel, DoctoolsRunParams{FilePath: "bad.xlsx"})
-		if err == nil || !strings.Contains(err.Error(), "failed to list sheets") {
-			t.Errorf("expected excel list sheets error, got %v", err)
+		res, err := handleCapture(ctx, FormatExcel, DoctoolsRunParams{FilePath: "bad.xlsx"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "read excel error") {
+			t.Errorf("expected excel list sheets error, got %+v", res)
 		}
 	})
 
@@ -222,12 +258,15 @@ func TestHandleCapture_Errors(t *testing.T) {
 			return 3, nil
 		}
 
-		_, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
+		res, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
 			FilePath: "sample.pdf",
 			Options:  &DoctoolsRunOptions{Pages: "abc"},
 		})
-		if err == nil {
-			t.Errorf("expected invalid page number error, got nil")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" {
+			t.Errorf("expected error status for invalid page range, got %+v", res)
 		}
 	})
 
@@ -246,12 +285,15 @@ func TestHandleCapture_Errors(t *testing.T) {
 			return nil, errors.New("extract error")
 		}
 
-		_, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
+		res, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
 			FilePath: "sample.pdf",
 			Options:  &DoctoolsRunOptions{Pages: "1"},
 		})
-		if err == nil || !strings.Contains(err.Error(), "extract error") {
-			t.Errorf("expected extract error, got %v", err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "extract error") {
+			t.Errorf("expected extract error status, got %+v", res)
 		}
 	})
 
@@ -272,12 +314,15 @@ func TestHandleCapture_Errors(t *testing.T) {
 			}, nil
 		}
 
-		_, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
+		res, err := handleCapture(ctx, FormatPDF, DoctoolsRunParams{
 			FilePath: "sample.pdf",
 			Options:  &DoctoolsRunOptions{Pages: "1"},
 		})
-		if err == nil || !strings.Contains(err.Error(), "failed to read captured image") {
-			t.Errorf("expected failed to read captured image error, got %v", err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "failed to read captured image") {
+			t.Errorf("expected failed to read captured image error status, got %+v", res)
 		}
 	})
 }

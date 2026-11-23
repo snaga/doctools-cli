@@ -55,10 +55,24 @@ func parsePageSelection(s string, totalPages int) (pages []int, skipped []int, e
 			if start > end {
 				start, end = end, start
 			}
-			for p := start; p <= end; p++ {
-				if 1 <= p && p <= totalPages {
+			// Extract valid pages within [1, totalPages]
+			vStart := start
+			if vStart < 1 {
+				vStart = 1
+			}
+			vEnd := end
+			if vEnd > totalPages {
+				vEnd = totalPages
+			}
+			if vStart <= vEnd {
+				for p := vStart; p <= vEnd; p++ {
 					validMap[p] = true
-				} else {
+				}
+			}
+			// Record skipped pages with a cap to avoid memory explosion on huge ranges (e.g. 1-10000000)
+			const maxSkippedCap = 100
+			for p := start; p <= end && len(skippedMap) < maxSkippedCap; p++ {
+				if p < 1 || p > totalPages {
 					skippedMap[p] = true
 				}
 			}
