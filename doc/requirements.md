@@ -171,9 +171,9 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
     - ［State-driven］ MCP サーバーの実行中、システムは `stdout` を JSON-RPC メッセージ専用とし、デバッグログや警告メッセージを `stdout` に混入させてはならない（`stderr` を使用）。
     - ［Unwanted-behavior］ 不正な JSON や未定義の JSON-RPC メソッドが送信されたとき、システムは仕様に準拠した JSON-RPC エラーオブジェクト（ParseError, MethodNotFound 等）を返却しなければならない。
 - 要件 MCP-02: 統合ディスパッチゲートウェイ (`doctools_run`)
-  - ユーザーストーリー: AI エージェントとして、ドキュメント形式ごとの複雑なコマンド構文やフラグを意識せず、単一のツール窓口から直感的に `read` および `search` アクションを実行したい。
+  - ユーザーストーリー: AI エージェントとして、ドキュメント形式ごとの複雑なコマンド構文やフラグを意識せず、単一のツール窓口から直感的に `read`, `search`, `capture` アクションを実行したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.csv`, `.html`, `.txt` 等。`.docx` は未対応）を自動判別し、対応する内部パーサーまたは検索エンジンへディスパッチしなければならない。
+    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.csv`, `.html`, `.txt` 等。`.docx` は未対応）を自動判別し、対応する内部パーサーまたは検索・画像化エンジンへディスパッチしなければならない。
     - ［Unwanted-behavior］ 未対応の拡張子または存在しない `file_path` が指定されたとき、システムはエラーメッセージおよび利用可能なファイル形式一覧を返却しなければならない。
     - ［Ubiquitous］ `doctools_run` のツール定義（Description）は、エージェントに対し PDF や Office ファイルの閲覧・検索時に `read_file` や Python スクリプト自作を行わず、必ず本ツールを使用することを義務付ける強い指示（Negative Affordance）を含まなければならない。
 - 要件 MCP-03: Smart Dynamic Response (動的閾値ハンドリング)
@@ -187,4 +187,13 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
   - EARS 受け入れ基準:
     - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号）と前後ハイライトスニペットの一覧を Markdown 形式テキストとして返却しなければならない。
     - ［Unwanted-behavior］ 検索クエリが空の場合、または対象ファイル内にクエリが 1 件も一致しなかったとき、システムは適切なエラーメッセージまたは 0 件ヒットである旨の明確な結果を返却しなければならない。
+- 要件 MCP-05: Smart Dynamic Capture (`command: "capture"`)
+  - ユーザーストーリー: AI エージェントとして、PDF や PowerPoint、Excel の特定ページやスライド、シートを高解像度画像としてキャプチャし、マルチモーダル視覚推論に活用したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ `command: "capture"` と有効な `file_path`（PDF/PPTX/Excel）が指定されたとき、システムはプリンタ記法（例: `"1"`, `"2-4"`, `"2,5,8"`）に従って指定ページ群を高解像度画像（デフォルト: 150dpi PNG）としてラスタライズし、ローカルファイル（既定: `.tmp/{base}_page_{num}.png`）に保存しなければならない。
+    - ［Event-driven］ キャプチャ結果が単一ページ（1枚）かつ `options.inline != false` のとき、システムはファイル保存パス情報に加えて MCP ImageContent（Base64 形式）をレスポンスに含めてインライン返却しなければならない。
+    - ［Event-driven］ キャプチャ結果が複数ページ（2枚以上）のとき、システムはコンテキスト保護のため ImageContent を含めず、全生成画像ファイルパスの一覧およびメタデータ（解像度・ファイルサイズ）のみを返却しなければならない。
+    - ［Unwanted-behavior］ テキスト・CSV・HTML などの画像化非対応形式が指定されたとき、システムはステータス error と画像化非対応である旨のエラーメッセージを返却しなければならない。
+    - ［Unwanted-behavior］ PowerPoint または Excel のキャプチャ実行時に Windows Office 環境が利用できない場合、システムはステータス error と Office 未導入である旨のエラーメッセージを返却しなければならない。
+    - ［Unwanted-behavior］ 指定されたページがすべて対象ドキュメントの範囲外の場合、システムはステータス error と有効なページ範囲を返却しなければならない（一部のみ範囲外の場合は存在するページのみ抽出しスキップ警告を添える）。
 

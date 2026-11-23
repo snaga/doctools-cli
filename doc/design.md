@@ -74,6 +74,7 @@
 | MCPサーバー | MCP-F02 | doctools_run (Dispatcher) | 統合ディスパッチャによる拡張子自動判定と内部エンジン呼び出し | MCP-02 |
 | MCPサーバー | MCP-F03 | Smart Dynamic Response | 文字数閾値に応じたインライン直接返却とファイル保存の動的切り替え | MCP-03 |
 | MCPサーバー | MCP-F04 | search (single file) | 単一ファイル内を対象としたピンポイントキーワード検索 | MCP-04 |
+| MCPサーバー | MCP-F05 | capture (Smart Dynamic Capture) | 単一ページBase64視覚注入と複数ページファイルハンドル返却の動的切り替え | MCP-05 |
 
 ※注: 要件定義において `EXCEL-04` は欠番となっており、`EXCEL-03` の次は `EXCEL-05` となっています。
 
@@ -166,6 +167,9 @@
 - **MCP-F04: 単一ファイル内ピンポイント検索 (command: search)**
   - **概要**: 対象ファイル内を高速走査し、一致したページ番号・シート名・スライド番号と前後ハイライトスニペットを返却。
   - **対応要件**: MCP-04
+- **MCP-F05: Smart Dynamic Capture (command: capture)**
+  - **概要**: プリンタ記法で指定したページ群を高解像度画像化。単一ページ時は MCP ImageContent (Base64) をインライン返却して LLM 視覚に注入し、複数ページ時はファイルハンドル（パス一覧）のみ返却してコンテキスト溢れを完全防止。
+  - **対応要件**: MCP-05
 
 ---
 
@@ -173,8 +177,8 @@
 
 ### 設計方針
 1. **Agent-Native Dual Interface**: 非対話型・JSON構造化出力 (`stdout`/`stderr` 完全分離)・3-Layer Introspection に加え、stdio JSON-RPC 2.0 MCP サーバーを内蔵し、エージェントの推論サンプリング空間に 1 級市民として常駐。
-2. **統合ディスパッチャ (Unified Dispatcher / Gateway)**: ツール過多（Tool Overload）を防ぐため、MCP ツールを `doctools_run` に集約し、拡張子自動判定とコアアクション (`read`, `search`) で整理。
-3. **Smart Dynamic Response**: 小容量はインライン直接返却で 1 ターン完結、大容量はローカルファイルパス（ハンドル）返却でコンテキスト保護を両立。
+2. **統合ディスパッチャ (Unified Dispatcher / Gateway)**: ツール過多（Tool Overload）を防ぐため、MCP ツールを `doctools_run` に集約し、拡張子自動判定とコアアクション (`read`, `search`, `capture`) で整理。
+3. **Smart Dynamic Response & Capture**: テキストは文字数閾値、画像は抽出ページ数（単一ページは Base64 注入、複数ページはファイルハンドル）で動的に切り替え、LLM の即応性とコンテキスト保護を両立。
 4. **単一実行バイナリ (Single Binary)**: CGO 静的リンクによる MuPDF / Bleve / `go-ole` を単一バイナリ `doctools-cli.exe` に内蔵し、外部ランタイム依存ゼロを実現。
 5. **厳格な単方向依存**: コアパーサーおよびモデル層は上位 CLI / MCP 層に依存しない。
 
@@ -432,8 +436,8 @@ flowchart TD
     "properties": {
       "command": {
         "type": "string",
-        "enum": ["read", "search"],
-        "description": "'read' extracts text/tables from the document; 'search' queries keywords within the specific document"
+        "enum": ["read", "search", "capture"],
+        "description": "'read' extracts text/tables from the document; 'search' queries keywords within the specific document; 'capture' renders pages/slides/sheets into images (single page returns inline Vision image, multiple pages return file handles)"
       },
       "file_path": {
         "type": "string",
@@ -446,11 +450,15 @@ flowchart TD
       "options": {
         "type": "object",
         "properties": {
-          "pages": { "type": "string", "description": "Page range (e.g. '1-5') for PDF" },
+          "pages": { "type": "string", "description": "Page range or selection (e.g. '1', '2-4', '1,3,5') for PDF/PPTX/Excel" },
           "sheet": { "type": "string", "description": "Sheet name for Excel" },
           "slides": { "type": "string", "description": "Slide numbers for PPTX" },
+          "dpi": { "type": "integer", "description": "Resolution in DPI for capture (default: 150)" },
+          "format": { "type": "string", "enum": ["png", "jpg"], "description": "Image format for capture (default: 'png')" },
+          "inline": { "type": "boolean", "description": "Whether to return inline base64 ImageContent for single-page capture (default: true)" },
           "max_inline_chars": { "type": "integer", "description": "Threshold for inline return (default: 4000)" },
-          "output_path": { "type": "string", "description": "Explicit output path when saving to file" }
+          "output_path": { "type": "string", "description": "Explicit output path when saving to file" },
+          "output_dir": { "type": "string", "description": "Output directory for captured images (default: '.tmp')" }
         }
       }
     },
@@ -484,6 +492,32 @@ sequenceDiagram
         Dispatcher-->>MCP: ファイルハンドル返却
         MCP-->>Agent: {"status": "saved_to_file", "file_path": ".tmp/spec_extracted.md", "total_pages": 45, "char_count": 28000, "message": "Content exceeded threshold. Safely saved to file."}
     end
+
+#### Smart Dynamic Capture 処理シーケンス
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Agent as AI Agent (LLM)
+    participant MCP as pkg/mcp (doctools_run)
+    participant Dispatcher as Format Dispatcher
+    participant Renderer as Rasterizer (MuPDF / COM)
+    participant FS as Local Filesystem
+
+    Agent->>MCP: call: doctools_run(command="capture", file_path="spec.pdf", options={"pages": "3"})
+    MCP->>Dispatcher: 拡張子判別 & プリンタ記法パース
+    Dispatcher->>Renderer: ページラスタライズ (150dpi PNG)
+    Renderer-->>Dispatcher: 画像バイト列 & 生成ファイルパス
+    Dispatcher->>FS: .tmp/{basename}_page_3.png に保存
+
+    alt 単一ページ抽出 (1枚) かつ options.inline != false
+        Dispatcher-->>MCP: MCP ImageContent (Base64) + ファイルパス
+        MCP-->>Agent: [Text: "Captured page 3 to .tmp/...", ImageContent(Base64 PNG)] (視覚に直接注入！)
+    else 複数ページ抽出 (2枚以上) または options.inline == false
+        Dispatcher-->>MCP: ファイルハンドル一覧 (パス・解像度・容量)
+        MCP-->>Agent: [Text: "Captured 3 pages:\n- .tmp/...page_1.png\n- .tmp/...page_2.png..."] (コンテキスト保護！)
+    end
+```
 ```
 
 ---
@@ -531,7 +565,9 @@ graph LR
 | パッケージ名 | 主要関数/メソッド | 入力 (Input) | 処理概要 (Processing) | 出力 (Output) |
 | :--- | :--- | :--- | :--- | :--- |
 | `pkg/mcp` | `ServeStdio()` | `os.Stdin`, `os.Stdout` | stdio 上で JSON-RPC 2.0 リクエストを処理・ディスパッチ | エラーまたは正常終了 |
-| `pkg/mcp` | `HandleDoctoolsRun(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | コマンド（`read`/`search`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response 判定 | `(*DoctoolsRunResult, error)` |
+| `pkg/mcp` | `HandleDoctoolsRun(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | コマンド（`read`/`search`/`capture`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response/Capture 判定 | `(*DoctoolsRunResult, error)` |
+| `pkg/mcp` | `handleCapture(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | フォーマット判別（PDF/PPTX/Excel）、プリンタ記法パース、各形式レンダラー呼び出し、Smart Dynamic Capture 判定（単一ページBase64/複数ページパス一覧） | `(*DoctoolsRunResult, error)` |
+| `pkg/mcp` | `parsePageSelection(s, totalPages)` | 選択文字列 (例: `"1-3,5"`), 総ページ数 (int) | プリンタ記法の解析、範囲バリデーション、ソート・重複排除 | `([]int, error)` |
 | `pkg/excel` | `ExtractCSV(path, sheets)` | XLSXパス, シート名一覧 | `excelize` で各シート走査し CSV 書き出し | 生成 CSV パス一覧 |
 | `pkg/excel` | `ExtractImages(path, dpi)` | XLSXパス, DPI | `go-ole` で FitToPagesWide 適用し PDF エクスポート | 生成 PDF パス一覧 |
 | `pkg/pptx` | `ExtractText(path)` | PPTXパス | Zip+XML 解析によりスライドテキスト抽出 | Markdown ファイルパス |

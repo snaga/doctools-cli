@@ -12,4 +12,5 @@ Doctools CLI (`doctools-cli`) における主要なアーキテクチャ設計�
 | [0006](0006-removal-of-docsearch-gui-and-agent-native-purification.md) | docsearch-gui の廃止と Agent-Native CLI への純化 | Accepted | 2026-11-22 | デスクトップGUI完全廃止、バイナリ分割解消、CLI単一バイナリ純化 |
 | [0007](0007-adoption-of-mupdf-for-pdf-text-extraction.md) | MuPDF (go-fitz) による高精度 PDF テキスト抽出の採用 | Accepted | 2026-11-22 | ToUnicode CMap 完全解決による文字化け根絶、描画命令混入防止 |
 | [0008](0008-mcp-server-and-unified-gateway.md) | Agent-Native MCP サーバー機能と統合ゲートウェイ (doctools_run) の導入 | Accepted | 2026-11-22 | stdio MCP サーバー内蔵、1級市民化、Dispatcher型統合ツール、Smart Dynamic Response |
+| [0009](0009-smart-dynamic-capture-command.md) | Smart Dynamic Capture コマンドとマルチモーダル VLM 連携 | Accepted | 2026-11-23 | command: capture の追加、単一ページBase64注入/複数ページファイルハンドル動的切替、プリンタ記法 |
 
