@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -131,27 +132,27 @@ func TestPrintJSONResponse(t *testing.T) {
 
 func TestDefaultExitWithErrorImpl(t *testing.T) {
 	var buf bytes.Buffer
-	oldWriter := OutputWriter
-	OutputWriter = &buf
-	defer func() { OutputWriter = oldWriter }()
+	oldWriter := ErrorWriter
+	ErrorWriter = &buf
+	defer func() { ErrorWriter = oldWriter }()
 
 	DefaultExitWithErrorImpl = func(err error) {
 		resp := models.ErrorResponse{
 			Status:    "error",
-			ErrorCode: "EXECUTION_ERROR",
+			ErrorCode: DetermineErrorCode(err),
 			Message:   err.Error(),
 		}
 		b, _ := json.MarshalIndent(resp, "", "  ")
-		w := OutputWriter
+		w := ErrorWriter
 		if w == nil {
 			w = os.Stderr
 		}
-		buf.WriteString(string(b) + "\n")
+		fmt.Fprintln(w, string(b))
 	}
 
 	DefaultExitWithErrorImpl(errors.New("test execution error"))
 	if !strings.Contains(buf.String(), "test execution error") {
-		t.Errorf("expected error written to custom OutputWriter, got: %s", buf.String())
+		t.Errorf("expected error written to custom ErrorWriter, got: %s", buf.String())
 	}
 }
 

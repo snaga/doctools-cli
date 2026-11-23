@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -126,4 +127,36 @@ func TestUnzipDecompress_CorruptZip(t *testing.T) {
 		t.Errorf("expected error for unsupported compression method")
 	}
 }
+
+func TestUnzipDecompress_ZipSlip(t *testing.T) {
+	tmpDir := t.TempDir()
+	maliciousZip := filepath.Join(tmpDir, "malicious.zip")
+
+	// Create zip with Zip Slip payload (../evil.txt)
+	zf, err := os.Create(maliciousZip)
+	if err != nil {
+		t.Fatalf("failed to create zip: %v", err)
+	}
+	zw := zip.NewWriter(zf)
+
+	w, err := zw.Create("../evil.txt")
+	if err != nil {
+		t.Fatalf("failed to create malicious header: %v", err)
+	}
+	w.Write([]byte("malicious content"))
+
+	zw.Close()
+	zf.Close()
+
+	destDir := filepath.Join(tmpDir, "extract")
+	_, err = util.UnzipDecompress(maliciousZip, destDir)
+	if err == nil {
+		t.Fatalf("expected Zip Slip detection error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "zip slip detected") {
+		t.Errorf("expected 'zip slip detected' in error, got: %v", err)
+	}
+}
+
 

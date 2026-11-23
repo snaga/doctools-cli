@@ -52,6 +52,52 @@ func TestTextOperations(t *testing.T) {
 		t.Errorf("ConvertEncoding default path failed: %v", err)
 	}
 	defer os.Remove(resConvDef)
+
+	// ConvertEncoding Japanese text: UTF-8 -> Shift_JIS -> EUC-JP -> UTF-8
+	jpPath := filepath.Join(tmpDir, "japanese.txt")
+	jpOriginal := "こんにちは世界！日本語テスト\n"
+	if err := os.WriteFile(jpPath, []byte(jpOriginal), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// UTF-8 to SJIS
+	sjisPath := filepath.Join(tmpDir, "japanese_sjis.txt")
+	_, err = text.ConvertEncoding(jpPath, "sjis", sjisPath)
+	if err != nil {
+		t.Fatalf("ConvertEncoding to sjis failed: %v", err)
+	}
+	sjisBytes, _ := os.ReadFile(sjisPath)
+	if string(sjisBytes) == jpOriginal {
+		t.Errorf("expected sjis bytes to differ from utf-8 original string")
+	}
+
+	// SJIS to EUC-JP
+	eucPath := filepath.Join(tmpDir, "japanese_euc.txt")
+	_, err = text.ConvertEncoding(sjisPath, "euc-jp", eucPath)
+	if err != nil {
+		t.Fatalf("ConvertEncoding to euc-jp failed: %v", err)
+	}
+
+	// EUC-JP to UTF-8
+	backUtf8Path := filepath.Join(tmpDir, "japanese_back.txt")
+	_, err = text.ConvertEncoding(eucPath, "utf-8", backUtf8Path)
+	if err != nil {
+		t.Fatalf("ConvertEncoding back to utf-8 failed: %v", err)
+	}
+	backBytes, _ := os.ReadFile(backUtf8Path)
+	if string(backBytes) != jpOriginal {
+		t.Errorf("expected roundtrip utf-8 %q, got %q", jpOriginal, string(backBytes))
+	}
+
+	// ConvertEncoding with empty file
+	emptyFile := filepath.Join(tmpDir, "empty.txt")
+	os.WriteFile(emptyFile, []byte{}, 0644)
+	emptyOut := filepath.Join(tmpDir, "empty_out.txt")
+	_, err = text.ConvertEncoding(emptyFile, "sjis", emptyOut)
+	if err != nil {
+		t.Fatalf("ConvertEncoding empty file failed: %v", err)
+	}
+
 }
 
 func TestTextErrorCases(t *testing.T) {
@@ -87,6 +133,13 @@ func TestTextErrorCases(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error for ConvertEncoding on nonexistent file")
 	}
+
+	// ConvertEncoding unsupported encoding
+	_, err = text.ConvertEncoding(filepath.Join(tmpDir, "sample.txt"), "invalid-encoding-xyz", "")
+	if err == nil {
+		t.Errorf("expected error for unsupported encoding")
+	}
+
 
 	// ConvertEncoding invalid output path (writing to dir)
 	validFile := filepath.Join(tmpDir, "valid.txt")

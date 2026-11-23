@@ -65,17 +65,11 @@ func TestPrintJSONResponse_Error(t *testing.T) {
 }
 
 func TestDefaultExitWithErrorImpl_NilWriter(t *testing.T) {
-	oldWriter := OutputWriter
-	OutputWriter = nil
-	defer func() { OutputWriter = oldWriter }()
+	oldWriter := ErrorWriter
+	ErrorWriter = nil
+	defer func() { ErrorWriter = oldWriter }()
 
-	resp := models.ErrorResponse{
-		Status:    "error",
-		ErrorCode: "EXECUTION_ERROR",
-		Message:   "test err",
-	}
-	_ = resp
-	w := OutputWriter
+	w := ErrorWriter
 	if w == nil {
 		w = os.Stderr
 	}
@@ -83,6 +77,32 @@ func TestDefaultExitWithErrorImpl_NilWriter(t *testing.T) {
 		t.Errorf("expected os.Stderr")
 	}
 }
+
+func TestDetermineErrorCode(t *testing.T) {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{err: nil, want: "EXECUTION_ERROR"},
+		{err: os.ErrNotExist, want: "FILE_NOT_FOUND"},
+		{err: errors.New("file not found: foo.txt"), want: "FILE_NOT_FOUND"},
+		{err: errors.New("no such file or directory"), want: "FILE_NOT_FOUND"},
+		{err: os.ErrPermission, want: "PERMISSION_DENIED"},
+		{err: os.ErrInvalid, want: "INVALID_ARGUMENT"},
+		{err: errors.New("invalid crop rectangle"), want: "INVALID_ARGUMENT"},
+		{err: errors.New("input paths list is empty"), want: "INVALID_ARGUMENT"},
+		{err: errors.New("unsupported encoding"), want: "INVALID_ARGUMENT"},
+		{err: errors.New("generic fatal error"), want: "EXECUTION_ERROR"},
+	}
+
+	for _, tt := range tests {
+		got := DetermineErrorCode(tt.err)
+		if got != tt.want {
+			t.Errorf("DetermineErrorCode(%v) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}
+
 
 type errorWriter struct{}
 func (e errorWriter) Write(p []byte) (n int, err error) {

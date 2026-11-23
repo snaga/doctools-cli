@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	imgpkg "doctools-cli/pkg/image"
@@ -46,8 +47,8 @@ func TestImageOperations(t *testing.T) {
 		t.Errorf("expected cropped image to exist")
 	}
 
-	// Crop with out-of-bounds cropRect (tests rect intersection logic)
-	resIntersect, err := imgpkg.Crop(imgPath, cropPath, -50, -50, 200, 200)
+	// Crop with out-of-bounds cropRect that intersects image (tests rect intersection logic)
+	resIntersect, err := imgpkg.Crop(imgPath, cropPath, 50, 50, 150, 150)
 	if err != nil {
 		t.Fatalf("Crop out of bounds failed: %v", err)
 	}
@@ -112,4 +113,32 @@ func TestImageErrorCases(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error for Crop writing to a directory")
 	}
+
+	// Crop boundary / validation test cases
+	boundaryCases := []struct {
+		name                   string
+		left, top, right, bot int
+		errMsg                 string
+	}{
+		{"negative left", -1, 0, 50, 50, "invalid crop rectangle"},
+		{"negative top", 0, -1, 50, 50, "invalid crop rectangle"},
+		{"right equals left", 10, 10, 10, 50, "invalid crop rectangle"},
+		{"right less than left", 20, 10, 10, 50, "invalid crop rectangle"},
+		{"bottom equals top", 10, 10, 50, 10, "invalid crop rectangle"},
+		{"bottom less than top", 10, 20, 50, 10, "invalid crop rectangle"},
+		{"no intersection with image (empty)", 150, 150, 200, 200, "invalid crop rectangle"},
+	}
+
+	for _, bc := range boundaryCases {
+		t.Run(bc.name, func(t *testing.T) {
+			_, err := imgpkg.Crop(imgPath, "", bc.left, bc.top, bc.right, bc.bot)
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", bc.name)
+			}
+			if !strings.Contains(err.Error(), bc.errMsg) {
+				t.Errorf("expected error containing %q, got %v", bc.errMsg, err)
+			}
+		})
+	}
+
 }

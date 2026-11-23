@@ -108,19 +108,28 @@ func UnzipDecompress(zipPath string, destDir string) (string, error) {
 	}
 	_ = os.MkdirAll(destDir, 0755)
 
+	destDirClean := filepath.Clean(destDir)
+
 	for _, f := range r.File {
-		fpath := filepath.Join(destDir, f.Name)
+		fpath := filepath.Join(destDirClean, f.Name)
+		fpathClean := filepath.Clean(fpath)
+
+		// Zip Slip vulnerability check
+		rel, err := filepath.Rel(destDirClean, fpathClean)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, "../") {
+			return "", fmt.Errorf("illegal file path in zip (zip slip detected): %s", f.Name)
+		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(fpath, os.ModePerm)
+			os.MkdirAll(fpathClean, os.ModePerm)
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fpathClean), os.ModePerm); err != nil {
 			return "", err
 		}
 
-		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		outFile, err := os.OpenFile(fpathClean, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
 			return "", err
 		}

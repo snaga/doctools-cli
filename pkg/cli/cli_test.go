@@ -3,6 +3,7 @@ package cli
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"doctools-cli/pkg/excel"
 	"doctools-cli/pkg/pptx"
 	"image"
@@ -577,5 +578,106 @@ func TestCLIFTSDetailed(t *testing.T) {
 		t.Errorf("expected 1 indexed file with dir alias flags, got: %s", outDirAlias)
 	}
 }
+
+func TestContextMinimization(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Excel extract-markdown context minimization
+	excelFile := filepath.Join(tmpDir, "test_context.xlsx")
+	f := excelize.NewFile()
+	f.SetCellValue("Sheet1", "A1", "Cell Content For Context Minimization")
+	f.SaveAs(excelFile)
+
+	excelOut := filepath.Join(tmpDir, "excel_out.md")
+	out, err, _ := runCLI("excel", "extract-markdown", excelFile, "-o", excelOut, "--json")
+	if err != nil {
+		t.Fatalf("excel extract-markdown with -o failed: %v", err)
+	}
+
+	var resp struct {
+		Status string `json:"status"`
+		Data   struct {
+			Content    string `json:"content"`
+			OutputPath string `json:"output_path"`
+			Length     int    `json:"length"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("failed to unmarshal JSON: %v, raw: %s", err, out)
+	}
+	if resp.Data.Content != "" {
+		t.Errorf("expected empty content when -o is specified, got: %q", resp.Data.Content)
+	}
+	if resp.Data.Length == 0 {
+		t.Errorf("expected non-zero length when -o is specified")
+	}
+	if resp.Data.OutputPath == "" {
+		t.Errorf("expected non-empty output_path")
+	}
+
+	// 2. PPTX extract-text context minimization
+	pptxFile := filepath.Join(tmpDir, "test_context.pptx")
+	createSamplePPTXCLI(t, pptxFile)
+
+	pptxOut := filepath.Join(tmpDir, "pptx_out.txt")
+	out, err, _ = runCLI("pptx", "extract-text", pptxFile, "-o", pptxOut, "--json")
+	if err != nil {
+		t.Fatalf("pptx extract-text with -o failed: %v", err)
+	}
+	var pptxResp struct {
+		Status string `json:"status"`
+		Data   struct {
+			Content    string `json:"content"`
+			OutputPath string `json:"output_path"`
+			Length     int    `json:"length"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &pptxResp); err != nil {
+		t.Fatalf("failed to unmarshal PPTX JSON: %v, raw: %s", err, out)
+	}
+	if pptxResp.Data.Content != "" {
+		t.Errorf("expected empty content in pptx when -o is specified, got: %q", pptxResp.Data.Content)
+	}
+	if pptxResp.Data.Length == 0 {
+		t.Errorf("expected non-zero length in pptx when -o is specified")
+	}
+	if pptxResp.Data.OutputPath == "" {
+		t.Errorf("expected non-empty output_path in pptx")
+	}
+
+	// 3. PDF extract-text context minimization
+	samplePdfSrc := filepath.Join("..", "..", "tests", "test_data", "sample.pdf")
+	if pdfData, err := os.ReadFile(samplePdfSrc); err == nil {
+		realPdfFile := filepath.Join(tmpDir, "real_sample.pdf")
+		os.WriteFile(realPdfFile, pdfData, 0644)
+		pdfOut := filepath.Join(tmpDir, "pdf_out.txt")
+
+		out, err, _ = runCLI("pdf", "extract-text", realPdfFile, "-o", pdfOut, "--json")
+		if err != nil {
+			t.Fatalf("pdf extract-text with -o failed: %v", err)
+		}
+		var pdfResp struct {
+			Status string `json:"status"`
+			Data   struct {
+				Content    string `json:"content"`
+				OutputPath string `json:"output_path"`
+				Length     int    `json:"length"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(out), &pdfResp); err != nil {
+			t.Fatalf("failed to unmarshal PDF JSON: %v, raw: %s", err, out)
+		}
+		if pdfResp.Data.Content != "" {
+			t.Errorf("expected empty content in pdf when -o is specified, got: %q", pdfResp.Data.Content)
+		}
+		if pdfResp.Data.Length == 0 {
+			t.Errorf("expected non-zero length in pdf when -o is specified")
+		}
+		if pdfResp.Data.OutputPath == "" {
+			t.Errorf("expected non-empty output_path in pdf")
+		}
+	}
+}
+
 
 

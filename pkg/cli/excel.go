@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"unicode/utf8"
 
 	"doctools-cli/pkg/excel"
 	"doctools-cli/pkg/models"
@@ -252,9 +253,7 @@ var excelExtractMarkdownCmd = &cobra.Command{
 		}
 
 		if JSONFlag {
-			data := map[string]interface{}{
-				"content": content,
-			}
+			data := map[string]interface{}{}
 			if excelExtractMdOut != "" {
 				absPath, err := filepath.Abs(excelExtractMdOut)
 				if err == nil {
@@ -262,6 +261,10 @@ var excelExtractMarkdownCmd = &cobra.Command{
 				} else {
 					data["output_path"] = excelExtractMdOut
 				}
+				data["content"] = ""
+				data["length"] = utf8.RuneCountInString(content)
+			} else {
+				data["content"] = content
 			}
 			util.PrintJSONResponse(models.SuccessResponse{
 				Status: "success",

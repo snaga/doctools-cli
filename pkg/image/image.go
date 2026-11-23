@@ -39,6 +39,10 @@ func GetMetadata(path string) (*ImageMetadata, error) {
 
 // Crop crops an image specified by rectangle (left, top, right, bottom).
 func Crop(inputPath string, outputPath string, left int, top int, right int, bottom int) (string, error) {
+	if left < 0 || top < 0 || right <= left || bottom <= top {
+		return "", fmt.Errorf("invalid crop rectangle: left=%d, top=%d, right=%d, bottom=%d", left, top, right, bottom)
+	}
+
 	f, err := os.Open(inputPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open image: %w", err)
@@ -54,6 +58,9 @@ func Crop(inputPath string, outputPath string, left int, top int, right int, bot
 	cropRect := image.Rect(left, top, right, bottom)
 	if !cropRect.In(bounds) {
 		cropRect = cropRect.Intersect(bounds)
+	}
+	if cropRect.Empty() {
+		return "", fmt.Errorf("invalid crop rectangle: intersection with image bounds is empty")
 	}
 
 	type subImager interface {

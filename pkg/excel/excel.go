@@ -512,9 +512,9 @@ func PatchExcel(targetPath string, patchItems []ExcelPatchItem, createBackup boo
 				return nil, fmt.Errorf("validation failed for item #%d (%s!%s): expected old_value '%s', got '%s'", i+1, item.Sheet, item.Cell, *expectedOld, curVal)
 			}
 		} else if item.OldValuePresent && item.OldValueIsNull {
-			fmt.Printf("[WARN] Cell %s: Guardrail explicitly bypassed (old_value is null).\n", item.Cell)
+			fmt.Fprintf(os.Stderr, "[WARN] Cell %s: Guardrail explicitly bypassed (old_value is null).\n", item.Cell)
 		} else {
-			fmt.Printf("[WARN] Cell %s: Guardrail omitted. Consider specifying \"old_value\" for safe execution.\n", item.Cell)
+			fmt.Fprintf(os.Stderr, "[WARN] Cell %s: Guardrail omitted. Consider specifying \"old_value\" for safe execution.\n", item.Cell)
 		}
 
 		prepared = append(prepared, preparedOp{

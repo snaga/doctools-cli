@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"unicode/utf8"
+
 	"doctools-cli/pkg/models"
 	"doctools-cli/pkg/pptx"
 	"doctools-cli/pkg/util"
@@ -29,12 +31,18 @@ var pptxExtractTextCmd = &cobra.Command{
 		if err != nil {
 			util.ExitWithError(err)
 		}
+		data := map[string]interface{}{
+			"output_path": pptxTextOutputPath,
+		}
+		if pptxTextOutputPath != "" {
+			data["content"] = ""
+			data["length"] = utf8.RuneCountInString(content)
+		} else {
+			data["content"] = content
+		}
 		util.PrintJSONResponse(models.SuccessResponse{
 			Status: "success",
-			Data: map[string]interface{}{
-				"content":     content,
-				"output_path": pptxTextOutputPath,
-			},
+			Data:   data,
 		})
 	},
 }
