@@ -1,6 +1,6 @@
 # 0004. PageIndex 階層ナビゲーション構造の導入
 
-* Status: Accepted
+* Status: Accepted (Amended by [ADR-0010](0010-focus-pageindex-on-deterministic-retrieval-and-removal-of-genai-dependency.md))
 * Date: 2026-08-12
 
 ## Context (背景)

@@ -1,6 +1,6 @@
 # 0008. Agent-Native MCP サーバー機能と統合ゲートウェイ (doctools_run) の導入
 
-- ステータス: 承認済み (Accepted)
+- ステータス: 承認済み (Accepted) (Amended by [ADR-0009](0009-smart-dynamic-capture-command.md))
 - 日付: 2026-11-22
 
 ## コンテキスト (Context)
