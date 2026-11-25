@@ -53,6 +53,8 @@ AI エージェント（Claude, Gemini, Cursor, Codex 等）に `doctools` CLI �
   `doctools-cli pdf extract-text doc.pdf --output ./out/doc.md --json`
   `doctools-cli pdf extract-images doc.pdf --output-dir ./out/img_objs --json`
   `doctools-cli pdf extract-pages doc.pdf --output-dir ./out/slides --dpi 150 --format png --json`
+- **Word (.docx) 構造化テキスト・見出し・表抽出**:
+  `doctools-cli docx extract-text document.docx --output ./out/doc.md --json`
 - **Bleve 全文検索 (On-the-fly チャンク化・差分更新・拡張子/ディレクトリフィルター & QueryString 複合検索)**:
   `doctools-cli fts build ./docs --index-path ./fts.bleve --include-ext md,csv,pdf --exclude-dir Temp,node_modules --verbose --json`
   `doctools-cli fts query ./fts.bleve "検索キーワード" --limit 10 --json`
@@ -101,6 +103,9 @@ doctools-cli pdf merge <file1.pdf> <file2.pdf> ... --output <merged.pdf> --json
 doctools-cli pdf extract-images <file.pdf> [--output-dir <dir>] --json
 doctools-cli pdf extract-pages <file.pdf> [-o <dir>] [--dpi <dpi>] [--format <png|jpg>] [--start-page <n>] [--end-page <n>] [--force] --json
 
+# Word 操作 (純Go Zip+XML 構造化テキスト・見出し・表抽出)
+doctools-cli docx extract-text <file.docx> [--output <file.md>] --json
+
 # 全文検索 (On-the-fly チャンク化 Bleve 日本語検索・差分更新・拡張子/ディレクトリフィルター・隠しフォルダ自動除外)
 doctools-cli fts build <target-dir> [-i <index-path>] [--include-ext <xlsx,pdf>] [--exclude-ext <tmp>] [--include-dir <dir1,dir2>] [--exclude-dir <node_modules,Temp,build>] [-t <10s>] [-f] [-v] --json
 doctools-cli fts query <index-path> <query> [-l <limit>] --json
@@ -148,8 +153,9 @@ doctools-cli agent-context --json
 ## 📜 更新履歴
 
 ### 0.8.0 (Unreleased)
+- **純 Go による Word (.docx) 構造化テキスト抽出・検索・FTS 連携**: `pkg/docx` を新設し、段落・見出し・表（GFM Markdown テーブル）を保持した高速抽出、CLI `docx extract-text`、MCP (`read`/`search`)、および Bleve FTS 全文検索インデックスに対応。外部依存・COM・CGO 不要の純 Go 実装によりゼロ依存シングルバイナリを維持。
 - **Agent-Native stdio MCP サーバーの搭載 (`doctools-cli mcp`)**: AI エージェント（Claude Desktop, Cursor, Antigravity 等）の Tool 定義として 1 級市民で常駐可能な stdio JSON-RPC 2.0 サーバーを内蔵。
-- **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read`、`search`、および `capture` アクションを実行可能。
+- **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, DOCX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read`、`search`、および `capture` アクションを実行可能。
 - **Smart Dynamic Response (動的テキスト閾値ハンドリング)**: 抽出テキストが 4,000 文字以下の場合はインライン Markdown 返却、超過時は自動でローカルファイル保存とメタデータ（総ページ/シート数、文字数）を返却して LLM のコンテキストウィンドウ枯渇を防止。
 - **Smart Dynamic Capture (動的画像キャプチャ制御)**: PDF, PPTX, Excel の指定ページ（プリンタ記法対応）を PNG 画像化。単一ページ抽出時は MCP `ImageContent` (Base64) を直接注入してエージェントの視覚推論器に提供し、複数ページ抽出時はファイル保存ハンドル一覧のみを返却してコンテキスト溢れを防止。
 - **単一ファイル内ピンポイント検索 (`command: search`)**: 指定した単一ファイル内からキーワード周辺のハイライトスニペットを抽出し、該当ページ番号やセル番地を高速取得。
