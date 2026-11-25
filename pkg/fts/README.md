@@ -1,7 +1,7 @@
 # `pkg/fts` - Full-Text Search Module
 
 ## 1. 責務 (Responsibility)
-ローカル文書（Excel, PPTX, PDF, CSV, Text, HTML）を On-the-fly で構造化テキストに分解し、Bleve による形態素・N-gram インデックスの高速構築・差分更新・構造化メタデータ付き全文検索を提供する。
+ローカル文書（Word, Excel, PPTX, PDF, CSV, Text, HTML）を On-the-fly で構造化テキストに分解し、Bleve による形態素・N-gram インデックスの高速構築・差分更新・構造化メタデータ付き全文検索を提供する。
 
 ## 2. 依存制約と不変条件 (Invariants & Boundaries)
 - **CLI/UI層非依存**:
@@ -24,5 +24,5 @@
   - *Why*: 事前中間テキストファイルをディスクに書き出さずメモリ上で即時インデックス化することで、ディスクI/Oとクリーンアップ負荷を最小化。
 
 ## 4. 関連仕様書 (Related Specs)
-- 要件: `doc/requirements.md` (FTS-01 〜 FTS-06)
-- 設計: `doc/design.md` (FTS-F01 〜 FTS-F06, IPO設計)
+- 要件: `doc/requirements.md` (FTS-01 〜 FTS-06, DOCX-02)
+- 設計: `doc/design.md` (FTS-F01 〜 FTS-F07, IPO設計)

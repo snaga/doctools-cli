@@ -21,6 +21,8 @@ import (
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/gen2brain/go-fitz"
 	"github.com/xuri/excelize/v2"
+
+	"doctools-cli/pkg/docx"
 )
 
 // DocumentChunk represents a searchable document chunk.
@@ -523,12 +525,15 @@ func setParseFileImpl(fn func(context.Context, string, string, os.FileInfo, stri
 	parseFileImpl = fn
 }
 
+// parseFile parses a file given its extension and dispatches to the corresponding parser.
 func parseFile(ctx context.Context, absPath string, relPath string, info os.FileInfo, ext string) ([]DocumentChunk, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	absPath = cleanPath(absPath)
 	switch ext {
+	case ".docx":
+		return parseDocx(absPath, relPath, info)
 	case ".xlsx":
 		return parseXlsx(absPath, relPath, info)
 	case ".pptx":
@@ -540,6 +545,56 @@ func parseFile(ctx context.Context, absPath string, relPath string, info os.File
 	default:
 		return nil, nil
 	}
+}
+
+// parseDocx extracts logical sections (headings, paragraphs, tables) from a Word (.docx)
+// document and converts them into searchable DocumentChunk instances.
+// Each section is assigned a precise locator (section=N) for pinpoint location targeting.
+// If no structured sections are extracted, it falls back to single-chunk document text indexing.
+func parseDocx(absPath string, relPath string, info os.FileInfo) ([]DocumentChunk, error) {
+	sections, err := docx.ExtractSections(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var chunks []DocumentChunk
+	for _, sec := range sections {
+		if strings.TrimSpace(sec.Content) == "" {
+			continue
+		}
+		chunks = append(chunks, DocumentChunk{
+			ID:          fmt.Sprintf("%s#section=%d", filepath.ToSlash(relPath), sec.Index),
+			FilePath:    absPath,
+			FileName:    info.Name(),
+			FileType:    ".docx",
+			UpdatedAt:   info.ModTime(),
+			Content:     sec.Content,
+			UnitType:    string(sec.Type),
+			UnitName:    sec.HeadingTitle,
+			PageOrIndex: sec.Index,
+			Locator:     fmt.Sprintf("section=%d", sec.Index),
+		})
+	}
+
+	if len(chunks) == 0 {
+		text, err := docx.ExtractText(absPath, "")
+		if err == nil && strings.TrimSpace(text) != "" {
+			chunks = append(chunks, DocumentChunk{
+				ID:          fmt.Sprintf("%s#section=0", filepath.ToSlash(relPath)),
+				FilePath:    absPath,
+				FileName:    info.Name(),
+				FileType:    ".docx",
+				UpdatedAt:   info.ModTime(),
+				Content:     text,
+				UnitType:    "document",
+				UnitName:    "",
+				PageOrIndex: 0,
+				Locator:     "section=0",
+			})
+		}
+	}
+
+	return chunks, nil
 }
 
 func parseXlsx(absPath string, relPath string, info os.FileInfo) ([]DocumentChunk, error) {

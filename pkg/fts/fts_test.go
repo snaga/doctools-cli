@@ -605,3 +605,135 @@ func TestBuildIndex_JapanesePDF(t *testing.T) {
 		t.Errorf("expected hit.Snippet to contain '<mark>' highlight, hits: %+v", qRes.Hits)
 	}
 }
+
+// createSampleDocxForFTS creates a minimal .docx archive containing the provided word/document.xml content for testing.
+func createSampleDocxForFTS(t *testing.T, path string, xmlBody string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("word/document.xml")
+	if err != nil {
+		t.Fatalf("failed to create word/document.xml: %v", err)
+	}
+
+	xmlDoc := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>` + xmlBody + `</w:body>
+</w:document>`
+
+	if _, err := w.Write([]byte(xmlDoc)); err != nil {
+		t.Fatalf("failed to write word/document.xml: %v", err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+}
+
+// TestFTS_Docx verifies that .docx files are properly indexed by Bleve FTS into logical sections
+// (heading, paragraph, table), and that QueryIndex hits return correct target metadata and snippets.
+func TestFTS_Docx(t *testing.T) {
+	tmpDir := t.TempDir()
+	docxPath := filepath.Join(tmpDir, "spec.docx")
+
+	bodyXML := `
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Quantum Core Architecture</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>This paragraph details the synchronization algorithm and pipeline throughput.</w:t></w:r>
+    </w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Module</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Latency</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>NeuralDispatcher</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>SubMillisecond</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>`
+
+	createSampleDocxForFTS(t, docxPath, bodyXML)
+
+	indexPath := filepath.Join(tmpDir, "docx.bleve")
+	res, err := fts.BuildIndex(tmpDir, indexPath)
+	if err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+	if res == "" {
+		t.Fatal("expected non-empty indexPath return")
+	}
+
+	tests := []struct {
+		name         string
+		query        string
+		wantUnitType string
+		wantUnitName string
+		wantLocator  string
+	}{
+		{
+			name:         "Heading keyword",
+			query:        "Quantum",
+			wantUnitType: "heading",
+			wantUnitName: "",
+			wantLocator:  "section=0",
+		},
+		{
+			name:         "Paragraph keyword",
+			query:        "synchronization",
+			wantUnitType: "paragraph",
+			wantUnitName: "Quantum Core Architecture",
+			wantLocator:  "section=1",
+		},
+		{
+			name:         "Table cell keyword",
+			query:        "NeuralDispatcher",
+			wantUnitType: "table",
+			wantUnitName: "Quantum Core Architecture",
+			wantLocator:  "section=2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qRes, err := fts.QueryIndex(indexPath, tc.query, 5)
+			if err != nil {
+				t.Fatalf("QueryIndex(%q) failed: %v", tc.query, err)
+			}
+			if qRes.TotalHits < 1 {
+				t.Fatalf("expected at least 1 hit for %q, got %d", tc.query, qRes.TotalHits)
+			}
+
+			hit := qRes.Hits[0]
+			if hit.Source.FileType != ".docx" {
+				t.Errorf("expected FileType .docx, got %q", hit.Source.FileType)
+			}
+			if hit.Target.UnitType != tc.wantUnitType {
+				t.Errorf("expected UnitType %q, got %q", tc.wantUnitType, hit.Target.UnitType)
+			}
+			if tc.wantUnitName != "" && hit.Target.UnitName != tc.wantUnitName {
+				t.Errorf("expected UnitName %q, got %q", tc.wantUnitName, hit.Target.UnitName)
+			}
+			if hit.Target.Locator != tc.wantLocator {
+				t.Errorf("expected Locator %q, got %q", tc.wantLocator, hit.Target.Locator)
+			}
+			if hit.Snippet == "" {
+				t.Errorf("expected non-empty Snippet")
+			}
+			if !strings.Contains(hit.Snippet, "<mark>") {
+				t.Errorf("expected Snippet to contain '<mark>' highlight tag, got %q", hit.Snippet)
+			}
+		})
+	}
+}
