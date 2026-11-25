@@ -18,6 +18,12 @@ func TestTextOperations(t *testing.T) {
 		t.Errorf("ReadHead failed: %v, len=%d", err, len(head))
 	}
 
+	// ReadHead nLines >= total lines
+	headAll, err := text.ReadHead(filePath, 10)
+	if err != nil || len(headAll) != 4 {
+		t.Errorf("ReadHead all lines failed: %v, len=%d", err, len(headAll))
+	}
+
 	// ReadTail nLines >= total lines
 	tailAll, err := text.ReadTail(filePath, 10)
 	if err != nil || len(tailAll) != 4 {
@@ -32,6 +38,12 @@ func TestTextOperations(t *testing.T) {
 	matches, err := text.Grep(filePath, "World")
 	if err != nil || len(matches) != 1 || matches[0].Line != 2 {
 		t.Errorf("Grep failed: %v, matches=%+v", err, matches)
+	}
+
+	// Grep multiple matches
+	matchesMulti, err := text.Grep(filePath, "Line")
+	if err != nil || len(matchesMulti) != 4 {
+		t.Errorf("Grep multiple matches failed: %v, matches=%+v", err, matchesMulti)
 	}
 
 	meta, err := text.GetMetadata(filePath)
@@ -96,6 +108,29 @@ func TestTextOperations(t *testing.T) {
 	_, err = text.ConvertEncoding(emptyFile, "sjis", emptyOut)
 	if err != nil {
 		t.Fatalf("ConvertEncoding empty file failed: %v", err)
+	}
+
+	// ConvertEncoding with additional encodings (iso-2022-jp, latin-1, windows-1252, htmlindex: gbk, euc-kr)
+	encodings := []struct {
+		name    string
+		content string
+	}{
+		{"iso-2022-jp", "テスト ISO-2022-JP\n"},
+		{"latin-1", "Hello Latin-1 ©\n"},
+		{"windows-1252", "Windows-1252 test €\n"},
+		{"gbk", "你好世界 GBK\n"},
+		{"euc-kr", "안녕하세요 EUC-KR\n"},
+	}
+	for _, enc := range encodings {
+		srcFile := filepath.Join(tmpDir, "enc_src_"+enc.name+".txt")
+		if err := os.WriteFile(srcFile, []byte(enc.content), 0644); err != nil {
+			t.Fatalf("failed to write %s src: %v", enc.name, err)
+		}
+		destFile := filepath.Join(tmpDir, "enc_dst_"+enc.name+".txt")
+		_, err := text.ConvertEncoding(srcFile, enc.name, destFile)
+		if err != nil {
+			t.Errorf("ConvertEncoding to %s failed: %v", enc.name, err)
+		}
 	}
 
 }
