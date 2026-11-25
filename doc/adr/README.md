@@ -14,4 +14,5 @@ Doctools CLI (`doctools-cli`) における主要なアーキテクチャ設計�
 | [0008](0008-mcp-server-and-unified-gateway.md) | Agent-Native MCP サーバー機能と統合ゲートウェイ (doctools_run) の導入 | Accepted | 2026-11-22 | stdio MCP サーバー内蔵、1級市民化、Dispatcher型統合ツール、Smart Dynamic Response |
 | [0009](0009-smart-dynamic-capture-command.md) | Smart Dynamic Capture コマンドとマルチモーダル VLM 連携 | Accepted | 2026-11-23 | command: capture の追加、単一ページBase64注入/複数ページファイルハンドル動的切替、プリンタ記法 |
 | [0010](0010-focus-pageindex-on-deterministic-retrieval-and-removal-of-genai-dependency.md) | PageIndex の決定論的構造ツリー探索 (Retrieval) 特化と GenAI SDK 依存の排除 | Accepted | 2026-11-23 | 完全ローカル・決定論的探索への純化、`pageindex build` および GenAI SDK 依存の完全削除 |
+| [0011](0011-pure-go-docx-support.md) | 純 Go による Word (.docx) 構造化テキスト抽出・検索およびシングルバイナリ維持 | Accepted | 2026-11-25 | 純Goによるdocxパース、表のMarkdown化、MCP(read/search)/CLI/FTS一貫対応 |
 

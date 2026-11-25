@@ -24,10 +24,12 @@
 │   │   ├── text.go
 │   │   ├── html.go
 │   │   ├── image.go
+│   │   ├── docx.go             # Word サブコマンド (doctools-cli docx)
 │   │   └── util.go
 │   ├── mcp/                    # MCP サーバー実装 (JSON-RPC 2.0 / doctools_run ディスパッチャ)
 │   ├── excel/                  # Excel 操作サービス (excelize + go-ole)
 │   ├── pptx/                   # PPTX 操作サービス (zip+xml + go-ole)
+│   ├── docx/                   # Word 操作サービス (zip+xml 純Go解析)
 │   ├── pdf/                    # PDF 操作サービス (pdfcpu + MuPDF fitz)
 │   ├── fts/                    # 全文検索サービス (bleve N-gram・On-the-fly チャンク化)
 │   ├── pageindex/              # PageIndex サービス (構造ツリー探索・ノード抽出)
@@ -38,7 +40,7 @@
 │   ├── models/                 # 標準レスポンス & エラーエンベロープ型定義
 │   └── util/                   # 共通ユーティリティ (ZIP圧縮/解凍・レスポンス成形)
 ├── doc/                        # 🌍 公開用ドキュメント・仕様書マスター
-│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0010)
+│   ├── adr/                    # アーキテクチャ決定レコード (ADR 0001〜0011)
 │   ├── product.md              # 製品概要・憲法
 │   ├── tech.md                 # 技術スタック仕様
 │   ├── structure.md            # プロジェクト構造（このファイル）

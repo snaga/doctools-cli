@@ -1,14 +1,14 @@
 # 製品概要
 
 ## 製品の目的
-Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカル環境の各種ドキュメント（Excel, PowerPoint, PDF, テキスト等）を高速かつ決定論的に操作・参照・検索できるようにするための **Go言語製 Agent-Native CLI ツール (`doctools-cli.exe`)**。
+Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカル環境の各種ドキュメント（Excel, PowerPoint, PDF, Word, テキスト等）を高速かつ決定論的に操作・参照・検索できるようにするための **Go言語製 Agent-Native CLI ツール (`doctools-cli.exe`)**。
 
 ## コアコンセプト
 - **"Agent-Native Dual Interface" (CLI & MCP)**: 
   - **CLI モード**: サブプロセス起動によるオーバーヘッドゼロ・Unix パイプ・決定論的 JSON 出力を提供する超高速実行モード。
   - **stdio MCP サーバーモード (`doctools-cli mcp`)**: エージェントの認知力学に基づき、Tool Definition Block に 1 級市民として常駐。`read_file` への安易な逃避や Python スクリプト自作の迷走を断ち切り、Office/PDF 操作を 1 ステップで直結発火。
 - **統合ゲートウェイ (`doctools_run`)**:
-  - ツールの乱立（Tool Overload）を防ぐため、Cloudflare 型の Dispatcher パターンを採用し、`read`（抽出）、`search`（単一ファイル内検索）、および `capture`（視覚化画像キャプチャ）のコアアクションに集約。拡張子に応じたエンジン（PDF/Excel/PPTX）を自動判別。
+  - ツールの乱立（Tool Overload）を防ぐため、Cloudflare 型の Dispatcher パターンを採用し、`read`（抽出）、`search`（単一ファイル内検索）、および `capture`（視覚化画像キャプチャ）のコアアクションに集約。拡張子に応じたエンジン（PDF/Excel/PPTX/Word 等）を自動判別。
 - **Smart Dynamic Response (動的閾値ハンドリング)**:
   - 抽出結果が一定サイズ（例: 4,000文字以下）の場合は直接 Markdown を返却して 1 ターンで完結。
   - 閾値を超える長大ドキュメントの場合は、自動的にローカル Markdown ファイルへ保存し、ファイルパスとメタデータを返却してエージェントのコンテキスト溢れを決定論的に防止。
@@ -27,6 +27,7 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
   - **Excel**: シート一覧取得、シートCSV抽出、セル単位差分比較 (Diff)、安全ガードレール付きパッチ適用 (Patch)、座標付きMarkdown抽出、キーワード検索、シートFit-to-Page画像化 (`go-ole` 連携)。
   - **PowerPoint**: テキスト抽出、複数ファイル結合 (純Go)、スライド画像化 (`go-ole` 連携)。
   - **PDF**: ページ分割・結合・埋め込み画像抽出 (`pdfcpu`)、**MuPDF (go-fitz) による高精度日本語テキスト抽出**、全画面スライド画像化 (MuPDF CGO 静的リンク)。
+  - **Word (.docx)**: 見出し階層や表（Markdown テーブル）を保持した純 Go 構造化テキスト抽出、単一ファイル内キーワード検索。
   - **CSV / Text / Image / HTML**: 高速なテキスト・画像・エンコーディング処理。
 - **Agent-Native MCP サーバー (`doctools-cli mcp`)**:
   - **stdio JSON-RPC 2.0**: エージェント環境（Antigravity, Claude, Cursor 等）のコンテキストに常駐する組み込み MCP サーバー。
@@ -38,7 +39,7 @@ Gemini-CLI、Claude、Antigravity などの AI エージェントが、ローカ
 - **PageIndex (推論ベースRAG支援)**:
   - **Structure Extraction & Node Retrieval**: ドキュメント構造解析およびピンポイント取得（完全ローカル・決定論的探索）。
 - **Search (全文検索)**:
-  - **Bleve Search Engine**: 各種ドキュメント (Excel, PPT, PDF, CSV, Text) を On-the-fly で Markdown/CSV テキストへ変換・チャンク分割し、ファイルパスやシート名・ページ番号などのメタデータ付きでインデックス登録。スコア、前後ハイライトスニペット、AI向けナビゲーション構造 (`target`) を返却する爆速全文検索。
+  - **Bleve Search Engine**: 各種ドキュメント (Excel, PPT, PDF, Word, CSV, Text) を On-the-fly で Markdown/CSV テキストへ変換・チャンク分割し、ファイルパスやシート名・ページ番号などのメタデータ付きでインデックス登録。スコア、前後ハイライトスニペット、AI向けナビゲーション構造 (`target`) を返却する爆速全文検索。
 
 ## ビジネス・開発目標
 AI エージェントがローカル知識ベースを高速かつ確実に探索できる環境を提供し、応答速度の劇的向上（ミリ秒単位の起動）とトークン消費削減を達成する。

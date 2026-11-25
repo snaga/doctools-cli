@@ -1,7 +1,7 @@
 # 要件定義 (Requirements)
 
 ## 概要
-Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerPoint, Excel, CSV, HTML, テキスト, 画像などのローカルドキュメントを高速・決定論的に閲覧・検索・加工できるようにするための **Go言語製 Agent-Native CLI ツール (`doctools-cli.exe`)** を提供する。
+Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerPoint, Excel, Word (.docx), CSV, HTML, テキスト, 画像などのローカルドキュメントを高速・決定論的に閲覧・検索・加工できるようにするための **Go言語製 Agent-Native CLI ツール (`doctools-cli.exe`)** を提供する。
 
 ## 前提条件
 - 配布物は単一の実行可能バイナリ (`doctools-cli.exe`) であり、Python ランタイムや外部 DLL は不要であること。
@@ -29,7 +29,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - **要件 NFR-04: テストカバレッジ率 (High Test Coverage)**
   - ユーザーストーリー: 開発者およびユーザーとして、すべてのパッケージが十分にテストされ高品質であることが保証されている状態を望む。なぜならリファクタリングや機能追加時のデグレを確実に防ぐためだ。
   - EARS 受け入れ基準:
-    - ［Ubiquitous］ システムの主要ロジックパッケージ (`pkg/pptx`, `pkg/util`, `pkg/excel`, `pkg/fts`, `pkg/cli`, `pkg/pdf`, `pkg/csv`, `pkg/text`, `pkg/html`, `pkg/image`, `pkg/pageindex`, `pkg/mcp`) は、ステートメントカバレッジ 90% 以上を達成しなければならない。
+    - ［Ubiquitous］ システムの主要ロジックパッケージ (`pkg/pptx`, `pkg/util`, `pkg/excel`, `pkg/fts`, `pkg/cli`, `pkg/pdf`, `pkg/csv`, `pkg/text`, `pkg/html`, `pkg/image`, `pkg/pageindex`, `pkg/mcp`, `pkg/docx`) は、ステートメントカバレッジ 90% 以上を達成しなければならない。
 
 ---
 
@@ -175,7 +175,7 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
 - 要件 MCP-02: 統合ディスパッチゲートウェイ (`doctools_run`)
   - ユーザーストーリー: AI エージェントとして、ドキュメント形式ごとの複雑なコマンド構文やフラグを意識せず、単一のツール窓口から直感的に `read`, `search`, `capture` アクションを実行したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.csv`, `.html`, `.txt` 等。`.docx` は未対応）を自動判別し、対応する内部パーサーまたは検索・画像化エンジンへディスパッチしなければならない。
+    - ［Event-driven］ `doctools_run` ツールが呼び出されたとき、システムは `file_path` の拡張子（`.pdf`, `.xlsx`, `.pptx`, `.docx`, `.csv`, `.html`, `.txt` 等）を自動判別し、対応する内部パーサーまたは検索・画像化エンジンへディスパッチしなければならない。
     - ［Unwanted-behavior］ 未対応の拡張子または存在しない `file_path` が指定されたとき、システムはエラーメッセージおよび利用可能なファイル形式一覧を返却しなければならない。
     - ［Ubiquitous］ `doctools_run` のツール定義（Description）は、エージェントに対し PDF や Office ファイルの閲覧・検索時に `read_file` や Python スクリプト自作を行わず、必ず本ツールを使用することを義務付ける強い指示（Negative Affordance）を含まなければならない。
 - 要件 MCP-03: Smart Dynamic Response (動的閾値ハンドリング)
@@ -184,10 +184,11 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
     - ［Event-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値（`max_inline_chars`、デフォルト: 4,000文字）以下の場合、システムはレスポンスの `content` に Markdown テキストを直接格納してインライン返却しなければならない。
     - ［Event-driven］ `command: "read"` の実行時、抽出された Markdown テキストの文字数が指定閾値を超過した場合、システムはテキストをローカル Markdown ファイル（`.tmp/` または指定出力先）に自動保存し、生成ファイルパス、総ページ数/シート数、文字数を含むメタデータおよびガイドメッセージを返却しなければならない。
     - ［Unwanted-behavior］ 不正なページ範囲やスライド範囲が指定されたとき、またはファイル書き込みに失敗したとき、システムはステータス error と詳細なエラーメッセージを返却しなければならない。
+    - ［Unwanted-behavior］ options.output_path または options.output_dir にパストラバーサル（../ 等）または危険な実行可能拡張子（.exe, .bat, .cmd, .ps1 等）が指定されたとき、システムはステータス error とセキュリティ警告を返却しなければならない。
 - 要件 MCP-04: 単一ファイル内ピンポイント検索 (`command: "search"`)
-  - ユーザーストーリー: AI エージェントとして、特定の PDF や Excel、PPTX ファイルの内部から指定したキーワードを検索し、一致したページやシートの座標と前後スニペットを取得したい。
+  - ユーザーストーリー: AI エージェントとして、特定の PDF や Excel、PPTX、Word (.docx) ファイルの内部から指定したキーワードを検索し、一致したページやシート、見出し・段落の座標と前後スニペットを取得したい。
   - EARS 受け入れ基準:
-    - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号）と前後ハイライトスニペットの一覧を Markdown 形式テキストとして返却しなければならない。
+    - ［Event-driven］ `command: "search"` と有効な `file_path` および `query` が指定されたとき、システムは対象ファイル内を高速走査し、一致した位置情報（PDF: ページ番号、Excel: シート名およびセル番地、PPTX: スライド番号、Word: 見出しおよび段落/表番号）と前後ハイライトスニペットの一覧を Markdown 形式テキストとして返却しなければならない。
     - ［Unwanted-behavior］ 検索クエリが空の場合、または対象ファイル内にクエリが 1 件も一致しなかったとき、システムは適切なエラーメッセージまたは 0 件ヒットである旨の明確な結果を返却しなければならない。
 - 要件 MCP-05: Smart Dynamic Capture (`command: "capture"`)
   - ユーザーストーリー: AI エージェントとして、PDF や PowerPoint、Excel の特定ページやスライド、シートを高解像度画像としてキャプチャし、マルチモーダル視覚推論に活用したい。
@@ -195,7 +196,21 @@ Gemini-CLI, Antigravity, Claude などの AI エージェントが、PDF, PowerP
     - ［Event-driven］ `command: "capture"` と有効な `file_path`（PDF/PPTX/Excel: `.pdf`, `.pptx`, `.xlsx`, `.xlsm`）が指定されたとき、システムはプリンタ記法（例: `"1"`, `"2-4"`, `"2,5,8"`）に従って指定ページ群を高解像度画像（デフォルト: 150dpi PNG）としてラスタライズし、ローカルファイル（既定: `.tmp/{base}_page_{num}.png`）に保存しなければならない。
     - ［Event-driven］ キャプチャ結果が単一ページ（1枚）かつ `options.inline != false` のとき、システムはファイル保存パス情報に加えて MCP ImageContent（Base64 形式）をレスポンスに含めてインライン返却しなければならない。
     - ［Event-driven］ キャプチャ結果が複数ページ（2枚以上）のとき、システムはコンテキスト保護のため ImageContent を含めず、全生成画像ファイルパスの一覧およびメタデータ（解像度・ファイルサイズ）のみを返却しなければならない。
-    - ［Unwanted-behavior］ テキスト・CSV・HTML などの画像化非対応形式が指定されたとき、システムはステータス error と画像化非対応である旨のエラーメッセージを返却しなければならない。
+    - ［Unwanted-behavior］ テキスト・CSV・HTML・Word (.docx) などの画像化非対応形式が指定されたとき、システムはステータス error と画像化非対応である旨のエラーメッセージを返却しなければならない。
     - ［Unwanted-behavior］ PowerPoint または Excel のキャプチャ実行時に Windows Office 環境が利用できない場合、システムはステータス error と Office 未導入である旨のエラーメッセージを返却しなければならない。
     - ［Unwanted-behavior］ 指定されたページがすべて対象ドキュメントの範囲外の場合、システムはステータス error と有効なページ範囲を返却しなければならない（一部のみ範囲外の場合は存在するページのみ抽出しスキップ警告を添える）。
+
+### 要件カテゴリ: Word/Docx操作 (DOCX)
+- 要件 DOCX-01: Word (.docx) 構造化テキスト抽出 (`doctools-cli docx extract-text`)
+  - ユーザーストーリー: AI エージェントとして、Word (.docx) ファイルから見出し階層や表構造を保持した Markdown テキストを高速に抽出し、ドキュメントの文脈を正確に理解したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ 有効な DOCX ファイルパスが指定されたとき、システムは純 Go の ZIP+XML パーサーを用いて段落・見出し階層および表（Markdown テーブル）を抽出し、Markdown 形式で `stdout` に出力しなければならない。
+    - ［Event-driven］ `--output` オプションが指定されたとき、システムは抽出された Markdown テキストを指定パスにファイルとして保存しなければならない。
+    - ［Unwanted-behavior］ 存在しないファイル、破損したファイル、または非対応の旧バイナリ形式（`.doc`）が指定されたとき、システムはエラーメッセージを `stderr` に出力して非ゼロの終了コードで終了しなければならない。
+    - ［Unwanted-behavior］ 暗号化された DOCX ファイル、または XML 展開サイズが安全上限（Zip Bomb）を超過するファイルを検知したとき、システムは処理を即座に安全中断し、エラーメッセージを `stderr` に出力して非ゼロの終了コードで終了しなければならない。
+- 要件 DOCX-02: FTS 全文検索における Word (.docx) インデックス連携
+  - ユーザーストーリー: AI エージェントとして、ローカルの Word ドキュメント群を全文検索インデックスに含め、キーワードで高速に該当箇所を特定したい。
+  - EARS 受け入れ基準:
+    - ［Event-driven］ `doctools-cli fts build` 実行時、対象ディレクトリ内に `.docx` ファイルが存在するとき、システムは段落および表単位でチャンク分割し、見出しメタデータ付きで Bleve インデックスに登録しなければならない。
+    - ［Event-driven］ `doctools-cli fts query` 実行時、`.docx` ドキュメント内のチャンクが一致したとき、システムはファイルパス、見出し・段落ロケーション、および前後ハイライトスニペットを返却しなければならない。
 

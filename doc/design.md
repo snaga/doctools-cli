@@ -75,6 +75,8 @@
 | MCPサーバー | MCP-F03 | Smart Dynamic Response | 文字数閾値に応じたインライン直接返却とファイル保存の動的切り替え | MCP-03 |
 | MCPサーバー | MCP-F04 | search (single file) | 単一ファイル内を対象としたピンポイントキーワード検索 | MCP-04 |
 | MCPサーバー | MCP-F05 | capture (Smart Dynamic Capture) | 単一ページBase64視覚注入と複数ページファイルハンドル返却の動的切り替え | MCP-05 |
+| Word操作 | DOCX-F01 | docx extract-text | Word (.docx) の見出し・表を保持した Markdown 抽出 | DOCX-01 |
+| 全文検索 (FTS) | FTS-F07 | fts docx-indexing | Word (.docx) の階層チャンク自動インデックス登録 | DOCX-02 |
 
 ※注: 要件定義において `EXCEL-04` は欠番となっており、`EXCEL-03` の次は `EXCEL-05` となっています。
 
@@ -130,13 +132,13 @@
   - **対応要件**: PDF-04
 
 ### 機能カテゴリ: 全文検索 (FTS)
-- **FTS-F01: fts build / FTS-F02: fts query / FTS-F03: fts build --file-timeout / FTS-F04: fts build --include-ext / FTS-F05: fts query (Self-Describing) / FTS-F06: fts build (--include-dir / --exclude-dir)**
-  - **概要**: Bleve による並列 N-gram 全文検索インデックス構築・差分更新・タイムアウトスキップ・隠しフォルダ除外・AI ナビゲーション付与。
-  - **対応要件**: FTS-01, FTS-02, FTS-03, FTS-04, FTS-05, FTS-06
+- **FTS-F01: fts build / FTS-F02: fts query / FTS-F03: fts build --file-timeout / FTS-F04: fts build --include-ext / FTS-F05: fts query (Self-Describing) / FTS-F06: fts build (--include-dir / --exclude-dir) / FTS-F07: fts docx-indexing**
+  - **概要**: Bleve による並列 N-gram 全文検索インデックス構築・差分更新・タイムアウトスキップ・隠しフォルダ除外・Word (.docx) 階層チャンクインデックス・AI ナビゲーション付与。
+  - **対応要件**: FTS-01, FTS-02, FTS-03, FTS-04, FTS-05, FTS-06, DOCX-02
 
 ### 機能カテゴリ: 構造RAG (PAGEINDEX)
-- **PAGEINDEX-F01: pageindex build / PAGEINDEX-F02: pageindex tree / PAGEINDEX-F03: pageindex content**
-  - **概要**: ドキュメント構造ツリー解析・段階的ツリー取得・ピンポイント本文抽出。
+- **PAGEINDEX-F01: pageindex tree / content (ADR-0010) / PAGEINDEX-F02: pageindex tree / PAGEINDEX-F03: pageindex content**
+  - **概要**: ドキュメント構造ツリー解析・段階的ツリー取得・ピンポイント本文抽出（GenAI SDK 依存完全排除・決定論的探索特化）。
   - **対応要件**: PAGEINDEX-01, PAGEINDEX-02, PAGEINDEX-03
 
 ### 機能カテゴリ: CSV操作 (CSV)
@@ -159,17 +161,22 @@
   - **概要**: `doctools-cli mcp` による stdio MCP サーバー起動、エージェント環境（Antigravity, Claude, Cursor 等）の Tool Definition Block への 1 級市民常駐。
   - **対応要件**: MCP-01
 - **MCP-F02: doctools_run (Unified Dispatcher)**
-  - **概要**: 単一ツールから拡張子を自動判定し、内部パーサー（PDF, XLSX, PPTX, CSV 等）へディスパッチ。
+  - **概要**: 単一ツールから拡張子を自動判定し、内部パーサー（PDF, XLSX, PPTX, DOCX, CSV 等）へディスパッチ。
   - **対応要件**: MCP-02
 - **MCP-F03: Smart Dynamic Response (動的閾値ハンドリング)**
   - **概要**: 抽出テキストが閾値（デフォルト 4,000 文字）以下は直接 Markdown 返却、超過時は自動でローカルファイル保存とパス返却。
   - **対応要件**: MCP-03
 - **MCP-F04: 単一ファイル内ピンポイント検索 (command: search)**
-  - **概要**: 対象ファイル内を高速走査し、一致したページ番号・シート名・スライド番号と前後ハイライトスニペットを返却。
+  - **概要**: 対象ファイル内を高速走査し、一致したページ番号・シート名・スライド番号・見出し/段落位置と前後ハイライトスニペットを返却。
   - **対応要件**: MCP-04
 - **MCP-F05: Smart Dynamic Capture (command: capture)**
   - **概要**: プリンタ記法で指定したページ群を高解像度画像化。単一ページ時は MCP ImageContent (Base64) をインライン返却して LLM 視覚に注入し、複数ページ時はファイルハンドル（パス一覧）のみ返却してコンテキスト溢れを完全防止。
   - **対応要件**: MCP-05
+
+### 機能カテゴリ: Word/Docx操作 (DOCX)
+- **DOCX-F01: docx extract-text**
+  - **概要**: 純 Go による ZIP+XML パース（`pkg/docx`）により、Word (.docx) 内の段落・見出し階層および表（Markdown テーブル）を構造化 Markdown として抽出。
+  - **対応要件**: DOCX-01
 
 ---
 
@@ -202,15 +209,17 @@ graph TD
         PkgCLI --> CSVSvc["pkg/csv"]
         PkgCLI --> TextSvc["pkg/text"]
         PkgCLI --> HTMLSvc["pkg/html"]
+        PkgCLI --> DocxSvc["pkg/docx"]
         PkgCLI --> ImageSvc["pkg/image"]
         PkgCLI --> UtilSvc["pkg/util"]
         PkgCLI --> VersionPkg["internal/version"]
 
-        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & HTMLSvc & CSVSvc & TextSvc
+        Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & DocxSvc & HTMLSvc & CSVSvc & TextSvc
         
         ExcelSvc --> ModelsPkg["pkg/models"]
         PPTXSvc --> ModelsPkg
         PDFSvc --> ModelsPkg
+        DocxSvc --> ModelsPkg
         FTSSvc --> ModelsPkg
         PISvc --> ModelsPkg
         CSVSvc --> ModelsPkg
@@ -252,6 +261,7 @@ flowchart TD
         EXCEL["pkg/excel (excelize + go-ole)"]
         PDF["pkg/pdf (pdfcpu + go-fitz MuPDF)"]
         PPTX["pkg/pptx (Pure Go Zip+XML + go-ole)"]
+        DOCX["pkg/docx (Pure Go Zip+XML)"]
         CSV["pkg/csv (chardet + encoding/csv)"]
         TEXT["pkg/text (chardet + bufio)"]
         HTML["pkg/html (Pure Go Regex Parser)"]
@@ -264,11 +274,11 @@ flowchart TD
         VERSION["internal/version (バージョン注入)"]
     end
 
-    CLI --> FTS & PI & EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION & MCP
-    MCP --> EXCEL & PDF & PPTX & HTML & CSV & TEXT
-    FTS --> EXCEL & PPTX & PDF & CSV & TEXT & HTML
+    CLI --> FTS & PI & EXCEL & PDF & PPTX & DOCX & CSV & TEXT & HTML & IMAGE & UTIL & MODELS & VERSION & MCP
+    MCP --> EXCEL & PDF & PPTX & DOCX & HTML & CSV & TEXT
+    FTS --> EXCEL & PPTX & PDF & DOCX & CSV & TEXT & HTML
     PI --> PDF & PPTX & EXCEL
-    EXCEL & PDF & PPTX & CSV & TEXT & HTML & IMAGE & UTIL --> MODELS
+    EXCEL & PDF & PPTX & DOCX & CSV & TEXT & HTML & IMAGE & UTIL --> MODELS
 ```
 
 ---
@@ -419,6 +429,10 @@ flowchart TD
     - Input: stdio (JSON-RPC 2.0 messages)
     - Processing: stdio 経由での Model Context Protocol サーバー起動およびリクエスト処理
     - Output: stdio (JSON-RPC 2.0 responses)
+36. **`doctools-cli docx extract-text <file>`**
+    - Input: `file` (string), `--output` (string)
+    - Processing: 純 Go による Zip+XML (`word/document.xml`) パース、見出し階層（`#`, `##`）および表（Markdown テーブル）の構造化テキスト抽出
+    - Output: `{"content": "...", "output_path": ".../doc.md"}`
 
 ### MCP インターフェース (`doctools_run`)
 
@@ -429,7 +443,7 @@ flowchart TD
 ```json
 {
   "name": "doctools_run",
-  "description": "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), CSV, Text/Markdown, or HTML files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
+  "description": "CRITICAL: ALWAYS use this tool instead of read_file or python scripts when inspecting, reading, or searching PDF, Excel (.xlsx), PowerPoint (.pptx), Word (.docx), CSV, Text/Markdown, or HTML files. Automatically extracts high-accuracy text/markdown. Small contents are returned directly; large contents are safely saved to a markdown file to protect context.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -473,7 +487,7 @@ sequenceDiagram
     actor Agent as AI Agent (LLM)
     participant MCP as pkg/mcp (doctools_run)
     participant Dispatcher as Format Dispatcher
-    participant Parser as Core Parser (PDF/Excel/PPTX)
+    participant Parser as Core Parser (PDF/Excel/PPTX/Word)
     participant FS as Local Filesystem
 
     Agent->>MCP: call: doctools_run(command="read", file_path="spec.pdf")
@@ -534,6 +548,7 @@ graph LR
     RootCmd --> CSVCmd["pkg/cli/csv.go"]
     RootCmd --> TextCmd["pkg/cli/text.go"]
     RootCmd --> HTMLCmd["pkg/cli/html.go"]
+    RootCmd --> DocxCmd["pkg/cli/docx.go"]
     RootCmd --> ImageCmd["pkg/cli/image.go"]
     RootCmd --> UtilCmd["pkg/cli/util.go"]
     RootCmd --> MCPCmd["pkg/cli/mcp.go"]
@@ -542,6 +557,7 @@ graph LR
     MCPSvc --> ExcelSvc["pkg/excel"]
     MCPSvc --> PPTXSvc["pkg/pptx"]
     MCPSvc --> PDFSvc["pkg/pdf"]
+    MCPSvc --> DocxSvc["pkg/docx"]
     MCPSvc --> HTMLSvc["pkg/html"]
     MCPSvc --> CSVSvc["pkg/csv"]
     MCPSvc --> TextSvc["pkg/text"]
@@ -549,6 +565,7 @@ graph LR
     ExcelCmd --> ExcelSvc
     PPTXCmd --> PPTXSvc
     PDFCmd --> PDFSvc
+    DocxCmd --> DocxSvc
     FTSCmd --> FTSSvc
     PICmd --> PISvc["pkg/pageindex"]
     CSVCmd --> CSVSvc
@@ -557,7 +574,7 @@ graph LR
     ImageCmd --> ImageSvc["pkg/image"]
     UtilCmd --> UtilSvc["pkg/util"]
 
-    ExcelSvc & PPTXSvc & PDFSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc --> ModelsPkg["pkg/models"]
+    ExcelSvc & PPTXSvc & PDFSvc & DocxSvc & FTSSvc & PISvc & CSVSvc & TextSvc & HTMLSvc & ImageSvc & UtilSvc --> ModelsPkg["pkg/models"]
 ```
 
 ### コンポーネント・パッケージ詳細 IPO テーブル
@@ -577,6 +594,8 @@ graph LR
 | `pkg/pdf` | `GetPageCount(path)` | PDFパス | `go-fitz` (MuPDF) による総ページ数取得 | 総ページ数 (int) |
 | `pkg/pdf` | `ExtractPageTexts(path)` | PDFパス | `go-fitz` (MuPDF) による全ページインメモリテキスト抽出 | map[int]string (ページ番号->テキスト) |
 | `pkg/pptx` | `GetSlideCount(path)` | PPTXパス | Zip+XML 解析による総スライド数取得 | 総スライド数 (int) |
+| `pkg/docx` | `ExtractText(path, outPath)` | DOCXパス, 出力パス | Zip+XML 解析により見出し階層および表（Markdownテーブル）を保持したテキスト抽出 | 抽出テキストおよびファイルパス |
+| `pkg/docx` | `ExtractSections(path)` | DOCXパス | Zip+XML 解析により見出し・段落・表ごとの構造化セクション一覧取得 | `[]DocxSection` (階層見出し, 本文, 種類) |
 | `pkg/html` | `ExtractContent(path)` | HTMLパス | Pure Go 正規表現タグ除去によるインメモリ Markdown 抽出 | 抽出 Markdown テキスト |
 | `pkg/pdf` | `ExtractImages(path, outputDir, selectedPages)` | PDFパス, 出力フォルダ, ページ番号配列 | `pdfcpu` による埋め込み画像抽出 | 生成画像パス一覧 |
 | `pkg/pdf` | `ExtractPages(inputPath, outputDir, dpi, format, startPage, endPage, force)` | PDFパス, 出力フォルダ, DPI, フォーマット, 開始/終了ページ, 上書きフラグ | `go-fitz` (MuPDF) による全画面ページ描画と保存 | レンダリング情報と生成画像パス一覧 |
@@ -604,7 +623,7 @@ type DocumentChunk struct {
     ID          string    `json:"id"`           // 例: "path/to/doc.xlsx#Sheet1"
     FilePath    string    `json:"file_path"`    // 絶対パス (Store: true)
     FileName    string    `json:"file_name"`    // ファイル名 (Store: true)
-    FileType    string    `json:"file_type"`    // "excel", "pptx", "pdf", "text", "csv" (Store: true)
+    FileType    string    `json:"file_type"`    // "excel", "pptx", "pdf", "word", "text", "csv" (Store: true)
     UpdatedAt   time.Time `json:"updated_at"`   // 最終更新日時 (Store: true)
     Content     string    `json:"content"`      // On-the-fly変換後のテキスト (Index: true, Store: true)
     UnitType    string    `json:"unit_type"`    // "sheet", "slide", "page", "section" (Store: true)
@@ -674,3 +693,15 @@ type DocumentChunk struct {
   "hint": "Please verify the absolute file path."
 }
 ```
+
+---
+
+## モジュール境界の意図永続化 (L1 Intent)
+
+新規追加モジュールにおける責務・依存制約・設計理由は以下の通り定義され、`pkg/docx/README.md` に永続化されます：
+
+### `pkg/docx` (Word .docx 解析モジュール)
+- **責務**: Word (.docx / Office Open XML) アーカイブから `word/document.xml` を解析し、見出し階層、段落、表（Markdown テーブル）を構造化テキストとして高速抽出する。
+- **依存制約**: Go 標準ライブラリ (`archive/zip`, `encoding/xml`, `strings`, `fmt`, `os` 等) および共通型 `pkg/models` のみに依存。外部サードパーティライブラリや CGO、COM への依存は禁止。
+- **技術選定理由 (Why)**: 既存の `pkg/pptx` と同様、標準ライブラリのみで完結させることでシングルバイナリ原則とポータビリティを 100% 維持し、外部ランタイム不要の爆速テキスト処理を実現するため。
+

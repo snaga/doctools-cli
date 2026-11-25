@@ -19,6 +19,8 @@
   - **選定理由**: Windows 環境において Excel および PowerPoint を COM (Component Object Model) 経由で直接操作するために採用。Fit-to-Page PDF 化や高精度スライド画像化を実現。
 - **saintfish/chardet**
   - **選定理由**: テキストファイルや CSV のエンコーディング判定を行う純 Go ライブラリ。
+- **archive/zip & encoding/xml (Go 標準ライブラリ)**
+  - **選定理由**: Word (.docx / OOXML) および PowerPoint (.pptx) の XML アーカイブを外部依存ゼロの純 Go で高速かつ安全に解析するために採用。外部サードパーティモジュール不要でシングルバイナリ原則を厳格に維持。
 
 ## テストツール
 - **testing** (Go 標準パッケージ): 単体テストおよび結合テストの基本フレームワーク。
