@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"doctools-cli/pkg/docx"
 	"doctools-cli/pkg/excel"
 	"doctools-cli/pkg/html"
 	"doctools-cli/pkg/pdf"
@@ -34,6 +35,67 @@ func RegisterDefaultSearchHandlers(d *Dispatcher) {
 	d.RegisterSearchHandler(FormatCSV, handleSearchCSV)
 	d.RegisterSearchHandler(FormatText, handleSearchText)
 	d.RegisterSearchHandler(FormatHTML, handleSearchHTML)
+	d.RegisterSearchHandler(FormatWord, handleSearchDocx)
+}
+
+// handleSearchDocx searches within Word (.docx) documents by section and returns structured search hits.
+func handleSearchDocx(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
+	sections, err := docx.ExtractSections(params.FilePath)
+	if err != nil {
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  fmt.Sprintf("failed to extract Word sections from %s: %v", params.FilePath, err),
+		}, nil
+	}
+
+	var hits []SearchHit
+	lowerQuery := strings.ToLower(params.Query)
+
+	for _, sec := range sections {
+		if strings.Contains(strings.ToLower(sec.Content), lowerQuery) {
+			var location string
+			switch sec.Type {
+			case docx.SectionHeading:
+				location = fmt.Sprintf("Heading (Level %d): %s", sec.HeadingLevel, sec.Content)
+			case docx.SectionParagraph:
+				if sec.HeadingTitle != "" {
+					location = fmt.Sprintf("Heading: %s > Paragraph %d", sec.HeadingTitle, sec.Index)
+				} else {
+					location = fmt.Sprintf("Paragraph %d", sec.Index)
+				}
+			case docx.SectionTable:
+				if sec.HeadingTitle != "" {
+					location = fmt.Sprintf("Heading: %s > Table %d", sec.HeadingTitle, sec.Index)
+				} else {
+					location = fmt.Sprintf("Table %d", sec.Index)
+				}
+			default:
+				if sec.HeadingTitle != "" {
+					location = fmt.Sprintf("Heading: %s > Section %d", sec.HeadingTitle, sec.Index)
+				} else {
+					location = fmt.Sprintf("Section %d", sec.Index)
+				}
+			}
+
+			snippet := makeSnippet(sec.Content, params.Query, 60)
+			hits = append(hits, SearchHit{
+				Location: location,
+				Snippet:  snippet,
+			})
+			if len(hits) >= MaxSearchHits {
+				break
+			}
+		}
+	}
+
+	formatted := formatSearchResults(params.FilePath, params.Query, hits)
+	return &DoctoolsRunResult{
+		Status:    "success",
+		Content:   formatted,
+		FilePath:  params.FilePath,
+		CharCount: utf8.RuneCountInString(formatted),
+	}, nil
 }
 
 func handleSearchPDF(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {

@@ -2,14 +2,16 @@
 
 ## 1. 責務 (Responsibility)
 AI エージェント（Claude, Cursor, Antigravity 等）向けに、Model Context Protocol (MCP) の stdio トランスポートに基づく JSON-RPC 2.0 サーバー機能を提供します。
-単一の統合ディスパッチャツール `doctools_run` を通じて、PDF, Excel, PPTX などのドキュメントに対する読み込み（`read`）、ピンポイント検索（`search`）、および視覚化画像キャプチャ（`capture`）をエージェントに提供します。
+単一の統合ディスパッチャツール `doctools_run` を通じて、PDF, Excel, PPTX, Word (.docx), CSV, Text, HTML などのドキュメントに対する読み込み（`read`）、ピンポイント検索（`search`）、および視覚化画像キャプチャ（`capture`）をエージェントに提供します。
 
 ## 2. 依存制約と不変条件 (Invariants & Boundaries)
 - **stdio 厳格分離の原則**:
   - `stdout` は JSON-RPC 2.0 プロトコル通信専用とし、デバッグログや内部出力は一切出力してはならない（常に `stderr` を使用）。
 - **上位依存の禁止**:
   - `pkg/mcp` は `pkg/cli` などの上位 CLI コマンド層に依存してはならない。
-  - 各種ドキュメント処理エンジン（`pkg/pdf`, `pkg/excel`, `pkg/pptx`, `pkg/html` など）をディスパッチ対象として呼び出す。
+  - 各種ドキュメント処理エンジン（`pkg/pdf`, `pkg/excel`, `pkg/pptx`, `pkg/docx`, `pkg/html` など）をディスパッチ対象として呼び出す。
+- **セキュリティガードレール**:
+  - `options.output_path` および `options.output_dir` に対するパストラバーサル（`..`）および危険な実行可能拡張子（`.exe`, `.bat`, `.cmd`, `.ps1` 等）の指定を拒否し、エージェント環境の安全性を担保する。
 - **Smart Dynamic Response (read コマンド)**:
   - 出力テキストサイズが設定閾値（デフォルト 4,000 文字）以下の場合はインラインで直接返却し、超過時は自動で Markdown ファイル保存を行いファイルパス情報を返却する。
 - **Smart Dynamic Capture (capture コマンド)**:

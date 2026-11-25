@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"doctools-cli/pkg/docx"
 	"doctools-cli/pkg/excel"
 	"doctools-cli/pkg/html"
 	"doctools-cli/pkg/pdf"
@@ -25,6 +26,21 @@ func RegisterDefaultReadHandlers(d *Dispatcher) {
 	d.RegisterReadHandler(FormatCSV, handleReadCSV)
 	d.RegisterReadHandler(FormatText, handleReadText)
 	d.RegisterReadHandler(FormatHTML, handleReadHTML)
+	d.RegisterReadHandler(FormatWord, handleReadDocx)
+}
+
+// handleReadDocx extracts formatted text/markdown from Word (.docx) files using pure Go docx parser.
+func handleReadDocx(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {
+	text, err := docx.ExtractText(params.FilePath, "")
+	if err != nil {
+		return &DoctoolsRunResult{
+			Status:   "error",
+			FilePath: params.FilePath,
+			Message:  fmt.Sprintf("failed to extract Word text from %s: %v", params.FilePath, err),
+		}, nil
+	}
+
+	return HandleSmartDynamicResponse(text, params, 0)
 }
 
 func handleReadPDF(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {

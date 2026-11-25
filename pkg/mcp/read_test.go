@@ -84,6 +84,33 @@ func createSampleHTML(t *testing.T, path string) {
 	}
 }
 
+// createSampleDocx creates a minimal .docx zip container with word/document.xml for testing.
+func createSampleDocx(t *testing.T, path string, xmlContent string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("failed to create directory for sample docx: %v", err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create sample docx file: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	zw := zip.NewWriter(f)
+	if xmlContent != "" {
+		w, err := zw.Create("word/document.xml")
+		if err != nil {
+			t.Fatalf("failed to create word/document.xml in zip: %v", err)
+		}
+		if _, err := w.Write([]byte(xmlContent)); err != nil {
+			t.Fatalf("failed to write document.xml: %v", err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+}
+
 func TestRead_PDF(t *testing.T) {
 	tempDir := t.TempDir()
 	pdfPath := filepath.Join(tempDir, "sample.pdf")
@@ -317,6 +344,74 @@ func TestRead_HTML(t *testing.T) {
 	}
 }
 
+// TestRead_Docx validates pure Go reading and Markdown extraction of Word (.docx) files.
+func TestRead_Docx(t *testing.T) {
+	tempDir := t.TempDir()
+	docxPath := filepath.Join(tempDir, "sample.docx")
+
+	docXML := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Project Architecture</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>This is the introductory paragraph for doctools CLI Word support.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`
+	createSampleDocx(t, docxPath, docXML)
+
+	ctx := context.Background()
+
+	t.Run("read full docx inline", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: docxPath,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Fatalf("expected success, got %+v", res)
+		}
+		if !strings.Contains(res.Content, "# Project Architecture") {
+			t.Errorf("expected heading '# Project Architecture' in content, got: %q", res.Content)
+		}
+		if !strings.Contains(res.Content, "introductory paragraph") {
+			t.Errorf("expected paragraph text in content, got: %q", res.Content)
+		}
+	})
+
+	t.Run("read docx threshold exceeded saved to file", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: docxPath,
+			Options: &mcp.DoctoolsRunOptions{
+				MaxInlineChars: 20,
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "saved_to_file" {
+			t.Fatalf("expected saved_to_file, got %+v", res)
+		}
+		if res.FilePath == "" {
+			t.Errorf("expected FilePath to be set for saved_to_file")
+		}
+		defer func() { _ = os.Remove(res.FilePath) }()
+		savedData, err := os.ReadFile(res.FilePath)
+		if err != nil {
+			t.Fatalf("failed to read saved file: %v", err)
+		}
+		if !strings.Contains(string(savedData), "# Project Architecture") {
+			t.Errorf("expected saved file to contain heading, got %q", string(savedData))
+		}
+	})
+}
+
 func TestSmartDynamicResponse_ThresholdHandling(t *testing.T) {
 	tempDir := t.TempDir()
 	txtPath := filepath.Join(tempDir, "large.txt")
@@ -442,6 +537,7 @@ func TestRead_CSV_EdgeCases(t *testing.T) {
 	})
 }
 
+// TestRead_ExtractionErrors tests error handling when reading corrupt files across all formats.
 func TestRead_ExtractionErrors(t *testing.T) {
 	tempDir := t.TempDir()
 	ctx := context.Background()
@@ -479,6 +575,18 @@ func TestRead_ExtractionErrors(t *testing.T) {
 		})
 		if err != nil || res.Status != "error" || !strings.Contains(res.Message, "failed to extract PDF") {
 			t.Errorf("expected pdf extract error, got %+v", res)
+		}
+	})
+
+	t.Run("corrupt docx", func(t *testing.T) {
+		corruptDocx := filepath.Join(tempDir, "corrupt.docx")
+		_ = os.WriteFile(corruptDocx, []byte("not a zip"), 0644)
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: corruptDocx,
+		})
+		if err != nil || res.Status != "error" || !strings.Contains(res.Message, "failed to extract Word") {
+			t.Errorf("expected docx extract error, got %+v", res)
 		}
 	})
 }

@@ -138,20 +138,29 @@ func (d *Dispatcher) Handle(ctx context.Context, params DoctoolsRunParams) (*Doc
 		}
 	}
 
-	supportedFormatsMsg := "Supported formats: PDF (.pdf), Excel (.xlsx, .xlsm), PowerPoint (.pptx), CSV (.csv), Text (.txt, .md, .markdown, .json, .yaml, .yml), HTML (.html, .htm)"
+	if params.Options != nil {
+		if err := validateOutputPathSecurity(params.Options.OutputPath, "options.output_path"); err != nil {
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: trimmedPath,
+				Message:  err.Error(),
+			}, nil
+		}
+		if err := validateOutputPathSecurity(params.Options.OutputDir, "options.output_dir"); err != nil {
+			return &DoctoolsRunResult{
+				Status:   "error",
+				FilePath: trimmedPath,
+				Message:  err.Error(),
+			}, nil
+		}
+	}
+
+	supportedFormatsMsg := "Supported formats: PDF (.pdf), Excel (.xlsx, .xlsm), PowerPoint (.pptx), Word (.docx), CSV (.csv), Text (.txt, .md, .markdown, .json, .yaml, .yml), HTML (.html, .htm)"
 	if format == FormatUnknown {
 		return &DoctoolsRunResult{
 			Status:   "error",
 			FilePath: trimmedPath,
 			Message:  fmt.Sprintf("unsupported file extension %q for file: %s. %s", filepath.Ext(trimmedPath), trimmedPath, supportedFormatsMsg),
-		}, nil
-	}
-
-	if format == FormatWord {
-		return &DoctoolsRunResult{
-			Status:   "error",
-			FilePath: trimmedPath,
-			Message:  fmt.Sprintf("Word (.docx) format is not yet supported in this version. %s", supportedFormatsMsg),
 		}, nil
 	}
 
@@ -268,4 +277,37 @@ func (d *Dispatcher) HandleToolCall(ctx context.Context, name string, arguments 
 		return nil, err
 	}
 	return res.ToCallToolResult(), nil
+}
+
+// dangerousExecutableExtensions defines blacklisted executable file extensions to prevent command injection or arbitrary execution.
+var dangerousExecutableExtensions = map[string]bool{
+	".exe":   true,
+	".bat":   true,
+	".cmd":   true,
+	".ps1":   true,
+	".sh":    true,
+	".vbs":   true,
+	".msi":   true,
+	".com":   true,
+	".scr":   true,
+	".pif":   true,
+	".dll":   true,
+	".so":    true,
+	".dylib": true,
+}
+
+// validateOutputPathSecurity enforces security guardrails against path traversal attacks and arbitrary executable output files.
+func validateOutputPathSecurity(path string, paramName string) error {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return nil
+	}
+	if strings.Contains(trimmed, "..") {
+		return fmt.Errorf("security violation: path traversal '..' is not allowed in %s", paramName)
+	}
+	ext := strings.ToLower(filepath.Ext(trimmed))
+	if dangerousExecutableExtensions[ext] {
+		return fmt.Errorf("security violation: executable extension %q is not allowed for %s", ext, paramName)
+	}
+	return nil
 }

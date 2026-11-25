@@ -48,6 +48,7 @@ func TestDetectFormat(t *testing.T) {
 	}
 }
 
+// TestDispatcher_Handle_Validation validates input validation, security guardrails, and error handling of doctools_run parameters.
 func TestDispatcher_Handle_Validation(t *testing.T) {
 	tempDir := t.TempDir()
 	validPDF := filepath.Join(tempDir, "test.pdf")
@@ -139,23 +140,72 @@ func TestDispatcher_Handle_Validation(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported Word docx", func(t *testing.T) {
-		docxFile := filepath.Join(tempDir, "test.docx")
-		_ = os.WriteFile(docxFile, []byte("docx"), 0644)
-
+	t.Run("security guardrail path traversal in output_path", func(t *testing.T) {
 		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
 			Command:  "read",
-			FilePath: docxFile,
+			FilePath: validPDF,
+			Options: &mcp.DoctoolsRunOptions{
+				OutputPath: "../outside.txt",
+			},
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if res.Status != "error" || !strings.Contains(res.Message, "Word (.docx) format is not yet supported") || !strings.Contains(res.Message, "Supported formats:") {
-			t.Errorf("expected Word unsupported error with supported formats list, got: %+v", res)
+		if res.Status != "error" || !strings.Contains(res.Message, "security violation: path traversal '..'") {
+			t.Errorf("expected security violation for path traversal, got: %+v", res)
+		}
+	})
+
+	t.Run("security guardrail executable extension in output_path", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: validPDF,
+			Options: &mcp.DoctoolsRunOptions{
+				OutputPath: "malicious.exe",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "security violation: executable extension") {
+			t.Errorf("expected security violation for executable extension, got: %+v", res)
+		}
+	})
+
+	t.Run("security guardrail path traversal in output_dir", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: validPDF,
+			Options: &mcp.DoctoolsRunOptions{
+				OutputDir: "sub/../../escape",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "security violation: path traversal '..'") {
+			t.Errorf("expected security violation for output_dir traversal, got: %+v", res)
+		}
+	})
+
+	t.Run("security guardrail executable extension in output_dir", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "read",
+			FilePath: validPDF,
+			Options: &mcp.DoctoolsRunOptions{
+				OutputDir: "output.bat",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "error" || !strings.Contains(res.Message, "security violation: executable extension") {
+			t.Errorf("expected security violation for output_dir executable extension, got: %+v", res)
 		}
 	})
 }
 
+// TestDispatcher_Handle_SupportedExtensions validates that all supported file extensions correctly route to registered format handlers.
 func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 	tempDir := t.TempDir()
 	ctx := context.Background()
@@ -163,7 +213,7 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 	d := mcp.NewDispatcher()
 	// Override read and search handlers with stubs confirming format routing
 	for _, fmtType := range []mcp.FileFormat{
-		mcp.FormatPDF, mcp.FormatExcel, mcp.FormatPPTX, mcp.FormatCSV, mcp.FormatText, mcp.FormatHTML,
+		mcp.FormatPDF, mcp.FormatExcel, mcp.FormatPPTX, mcp.FormatCSV, mcp.FormatText, mcp.FormatHTML, mcp.FormatWord,
 	} {
 		f := fmtType
 		d.RegisterReadHandler(f, func(ctx context.Context, format mcp.FileFormat, params mcp.DoctoolsRunParams) (*mcp.DoctoolsRunResult, error) {
@@ -198,6 +248,7 @@ func TestDispatcher_Handle_SupportedExtensions(t *testing.T) {
 		{".yml", mcp.FormatText},
 		{".html", mcp.FormatHTML},
 		{".htm", mcp.FormatHTML},
+		{".docx", mcp.FormatWord},
 	}
 
 	for _, item := range supportedExts {

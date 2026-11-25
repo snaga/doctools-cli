@@ -253,6 +253,126 @@ func TestSearch_HTML(t *testing.T) {
 	})
 }
 
+// TestSearch_Docx validates searching within Word (.docx) documents by headings, paragraphs, and tables.
+func TestSearch_Docx(t *testing.T) {
+	tempDir := t.TempDir()
+	docxPath := filepath.Join(tempDir, "search_sample.docx")
+
+	docXML := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Introduction to Architecture</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>This section explains the core architecture and deployment flow.</w:t></w:r>
+    </w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Module</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Purpose</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>docx</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Pure Go Word parser</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>Security Guidelines</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>Output paths must be validated to prevent directory traversal.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`
+	createSampleDocx(t, docxPath, docXML)
+
+	ctx := context.Background()
+
+	t.Run("matching heading case-insensitive", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "search",
+			FilePath: docxPath,
+			Query:    "introduction",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Fatalf("expected success, got %+v", res)
+		}
+		if !strings.Contains(res.Content, "Found 1 match(es)") {
+			t.Errorf("expected 1 match, got: %q", res.Content)
+		}
+		if !strings.Contains(res.Content, "Heading (Level 1): Introduction to Architecture") {
+			t.Errorf("expected heading location, got: %q", res.Content)
+		}
+		if !strings.Contains(res.Content, "[Introduction]") {
+			t.Errorf("expected highlighted snippet [Introduction], got: %q", res.Content)
+		}
+	})
+
+	t.Run("matching paragraph under heading", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "search",
+			FilePath: docxPath,
+			Query:    "deployment",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Fatalf("expected success, got %+v", res)
+		}
+		if !strings.Contains(res.Content, "Heading: Introduction to Architecture > Paragraph") {
+			t.Errorf("expected heading hierarchy in paragraph location, got: %q", res.Content)
+		}
+		if !strings.Contains(res.Content, "[deployment]") {
+			t.Errorf("expected highlighted snippet [deployment], got: %q", res.Content)
+		}
+	})
+
+	t.Run("matching table under heading", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "search",
+			FilePath: docxPath,
+			Query:    "Pure Go Word parser",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Fatalf("expected success, got %+v", res)
+		}
+		if !strings.Contains(res.Content, "Heading: Introduction to Architecture > Table") {
+			t.Errorf("expected heading hierarchy in table location, got: %q", res.Content)
+		}
+		if !strings.Contains(res.Content, "[Pure Go Word parser]") {
+			t.Errorf("expected highlighted snippet for table, got: %q", res.Content)
+		}
+	})
+
+	t.Run("non-matching query", func(t *testing.T) {
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "search",
+			FilePath: docxPath,
+			Query:    "nonexistent_term_xyz",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Status != "success" {
+			t.Fatalf("expected success status, got %+v", res)
+		}
+		if !strings.Contains(res.Content, "No matches found for \"nonexistent_term_xyz\"") {
+			t.Errorf("expected no matches message, got: %q", res.Content)
+		}
+	})
+}
+
+// TestSearch_Errors tests error handling when searching across corrupted files in supported formats.
 func TestSearch_Errors(t *testing.T) {
 	tempDir := t.TempDir()
 	ctx := context.Background()
@@ -293,6 +413,19 @@ func TestSearch_Errors(t *testing.T) {
 		})
 		if err != nil || res.Status != "error" || !strings.Contains(res.Message, "failed to search Excel") {
 			t.Errorf("expected error on corrupt excel search, got %+v", res)
+		}
+	})
+
+	t.Run("corrupt docx search", func(t *testing.T) {
+		corruptDocx := filepath.Join(tempDir, "bad.docx")
+		_ = os.WriteFile(corruptDocx, []byte("broken docx"), 0644)
+		res, err := mcp.HandleDoctoolsRun(ctx, mcp.DoctoolsRunParams{
+			Command:  "search",
+			FilePath: corruptDocx,
+			Query:    "term",
+		})
+		if err != nil || res.Status != "error" || !strings.Contains(res.Message, "failed to extract Word") {
+			t.Errorf("expected error on corrupt docx search, got %+v", res)
 		}
 	})
 }
