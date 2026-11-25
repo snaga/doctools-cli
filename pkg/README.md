@@ -23,6 +23,7 @@ flowchart TD
         EXCEL["pkg/excel (excelize + go-ole)"]
         PDF["pkg/pdf (pdfcpu + go-fitz MuPDF)"]
         PPTX["pkg/pptx (Pure Go Zip+XML + go-ole)"]
+        DOCX["pkg/docx (Pure Go Zip+XML)"]
         CSV["pkg/csv (chardet + encoding/csv)"]
         TEXT["pkg/text (chardet + bufio)"]
         HTML["pkg/html (Pure Go Regex Parser)"]
@@ -39,6 +40,7 @@ flowchart TD
     CLI --> EXCEL
     CLI --> PDF
     CLI --> PPTX
+    CLI --> DOCX
     CLI --> CSV
     CLI --> TEXT
     CLI --> HTML
@@ -49,6 +51,7 @@ flowchart TD
     FTS --> EXCEL
     FTS --> PPTX
     FTS --> PDF
+    FTS --> DOCX
     FTS --> CSV
     FTS --> TEXT
     FTS --> HTML
@@ -60,6 +63,7 @@ flowchart TD
     EXCEL --> MODELS
     PDF --> MODELS
     PPTX --> MODELS
+    DOCX --> MODELS
     CSV --> MODELS
     TEXT --> MODELS
     HTML --> MODELS
@@ -80,6 +84,7 @@ flowchart TD
 | **`pkg/excel`** | [`pkg/excel/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/excel/README.md) | `excelize` による CSV/Markdown 抽出、セル差分 (Diff)、安全パッチ (Patch)、`go-ole` 画像化 |
 | **`pkg/pdf`** | [`pkg/pdf/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pdf/README.md) | `pdfcpu` (分割・結合・埋め込み画像抽出) + `go-fitz` MuPDF CGO (高精度日本語テキスト抽出・スライド画像化) |
 | **`pkg/pptx`** | [`pkg/pptx/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/pptx/README.md) | Pure Go Zip+XML テキスト抽出・結合 + `go-ole` スライド画像化 |
+| **`pkg/docx`** | [`pkg/docx/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/docx/README.md) | Pure Go Zip+XML 解析による Word (.docx) 構造化テキスト・見出し・Markdown テーブル抽出 |
 | **`pkg/csv`** | [`pkg/csv/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/csv/README.md) | `chardet` 自動文字コード判別、1-based 部分読み込み、セル内検索 |
 | **`pkg/text`** | [`pkg/text/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/text/README.md) | 行ストリーム処理 (`head`/`tail`/`grep`)、文字コード変換 (CP932/UTF-8) |
 | **`pkg/html`** | [`pkg/html/README.md`](file:///C:/Users/satos/dev/doctools-cli/pkg/html/README.md) | Pure Go による超高速テキスト・Markdown 抽出、不要タグ・スクリプト除去 |

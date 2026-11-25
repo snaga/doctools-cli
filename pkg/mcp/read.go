@@ -40,7 +40,8 @@ func handleReadDocx(ctx context.Context, format FileFormat, params DoctoolsRunPa
 		}, nil
 	}
 
-	return HandleSmartDynamicResponse(text, params, 0)
+	secs, _ := docx.ExtractSections(params.FilePath)
+	return HandleSmartDynamicResponse(text, params, len(secs))
 }
 
 func handleReadPDF(ctx context.Context, format FileFormat, params DoctoolsRunParams) (*DoctoolsRunResult, error) {

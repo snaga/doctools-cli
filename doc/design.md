@@ -215,6 +215,7 @@ graph TD
         PkgCLI --> VersionPkg["internal/version"]
 
         Dispatcher --> ExcelSvc & PPTXSvc & PDFSvc & DocxSvc & HTMLSvc & CSVSvc & TextSvc
+        FTSSvc --> ExcelSvc & PPTXSvc & PDFSvc & DocxSvc & CSVSvc & TextSvc & HTMLSvc
         
         ExcelSvc --> ModelsPkg["pkg/models"]
         PPTXSvc --> ModelsPkg
@@ -583,6 +584,7 @@ graph LR
 | :--- | :--- | :--- | :--- | :--- |
 | `pkg/mcp` | `ServeStdio()` | `os.Stdin`, `os.Stdout` | stdio 上で JSON-RPC 2.0 リクエストを処理・ディスパッチ | エラーまたは正常終了 |
 | `pkg/mcp` | `HandleDoctoolsRun(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | コマンド（`read`/`search`/`capture`）および拡張子に応じたエンジン呼び出し・Smart Dynamic Response/Capture 判定 | `(*DoctoolsRunResult, error)` |
+| `pkg/mcp` | `validateOutputPathSecurity(options)` | `*DoctoolsRunOptions` | 出力先パスのパストラバーサル（`..`）および危険拡張子（`.exe`, `.bat`, `.cmd`, `.ps1`, `.sh` 等）の事前検証・遮断 | エラーまたは `nil` |
 | `pkg/mcp` | `handleCapture(ctx, params)` | `ctx context.Context, params DoctoolsRunParams` | フォーマット判別（PDF/PPTX/Excel）、プリンタ記法パース、各形式レンダラー呼び出し、Smart Dynamic Capture 判定（単一ページBase64/複数ページパス一覧） | `(*DoctoolsRunResult, error)` |
 | `pkg/mcp` | `parsePageSelection(s, totalPages)` | 選択文字列 (例: `"1-3,5"`), 総ページ数 (int) | プリンタ記法の解析、範囲バリデーション、ソート・重複排除 | `([]int, []int, error)` |
 | `pkg/excel` | `ExtractCSV(path, sheets)` | XLSXパス, シート名一覧 | `excelize` で各シート走査し CSV 書き出し | 生成 CSV パス一覧 |
@@ -623,7 +625,7 @@ type DocumentChunk struct {
     ID          string    `json:"id"`           // 例: "path/to/doc.xlsx#Sheet1"
     FilePath    string    `json:"file_path"`    // 絶対パス (Store: true)
     FileName    string    `json:"file_name"`    // ファイル名 (Store: true)
-    FileType    string    `json:"file_type"`    // "excel", "pptx", "pdf", "word", "text", "csv" (Store: true)
+    FileType    string    `json:"file_type"`    // "excel", "pptx", "pdf", "word", "text", "csv", "html" (Store: true)
     UpdatedAt   time.Time `json:"updated_at"`   // 最終更新日時 (Store: true)
     Content     string    `json:"content"`      // On-the-fly変換後のテキスト (Index: true, Store: true)
     UnitType    string    `json:"unit_type"`    // "sheet", "slide", "page", "section" (Store: true)
@@ -643,16 +645,14 @@ type DocumentChunk struct {
     {
       "node_id": "sec-1",
       "title": "1. はじめに",
-      "level": 1,
-      "page": 1,
-      "summary": "本仕様書の目的と適用範囲...",
-      "children": [
+      "start_index": 1,
+      "end_index": 5,
+      "nodes": [
         {
           "node_id": "sec-1-1",
           "title": "1.1 背景",
-          "level": 2,
-          "page": 2,
-          "summary": "開発背景と課題..."
+          "start_index": 2,
+          "end_index": 3
         }
       ]
     }
