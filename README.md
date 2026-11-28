@@ -152,7 +152,7 @@ doctools-cli agent-context --json
 
 ## 📜 更新履歴
 
-### 0.8.0 (Unreleased)
+### 0.8.0 (2026-11-28)
 - **純 Go による Word (.docx) 構造化テキスト抽出・検索・FTS 連携**: `pkg/docx` を新設し、段落・見出し・表（GFM Markdown テーブル）を保持した高速抽出、CLI `docx extract-text`、MCP (`read`/`search`)、および Bleve FTS 全文検索インデックスに対応。外部依存・COM・CGO 不要の純 Go 実装によりゼロ依存シングルバイナリを維持。
 - **Agent-Native stdio MCP サーバーの搭載 (`doctools-cli mcp`)**: AI エージェント（Claude Desktop, Cursor, Antigravity 等）の Tool 定義として 1 級市民で常駐可能な stdio JSON-RPC 2.0 サーバーを内蔵。
 - **統合ディスパッチャ (`doctools_run`)**: 拡張子（PDF, Excel, PPTX, DOCX, CSV, Text, HTML）を自動判別し、単一インターフェースから直感的に `read`、`search`、および `capture` アクションを実行可能。
